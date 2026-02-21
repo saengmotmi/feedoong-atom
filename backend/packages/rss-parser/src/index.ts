@@ -1,6 +1,8 @@
 import Parser from "rss-parser";
 import { z } from "zod";
 
+import { discoverFeedCandidates } from "./discovery/index.js";
+
 export const rssUrlSchema = z.string().url();
 
 export type ParsedFeedItem = {
@@ -14,6 +16,8 @@ export type ParsedFeedItem = {
 export type ParsedFeedResult = {
   title: string;
   url: string;
+  feedUrl: string;
+  discoveryStrategy: string;
   items: ParsedFeedItem[];
 };
 
@@ -22,22 +26,39 @@ const parser = new Parser();
 const toSafeGuid = (link: string, title: string) => `${link}::${title}`;
 
 export const parseFeed = async (url: string): Promise<ParsedFeedResult> => {
-  const feedUrl = rssUrlSchema.parse(url);
-  const parsed = await parser.parseURL(feedUrl);
+  const inputUrl = rssUrlSchema.parse(url);
+  const discovery = await discoverFeedCandidates(inputUrl);
+  const errors: string[] = [];
 
-  return {
-    title: parsed.title ?? feedUrl,
-    url: parsed.link ?? feedUrl,
-    items: (parsed.items ?? []).map((item) => {
-      const link = item.link ?? "";
-      const title = item.title ?? "(제목 없음)";
+  for (const candidateFeedUrl of discovery.candidates) {
+    try {
+      const parsed = await parser.parseURL(candidateFeedUrl);
+
       return {
-        guid: item.guid ?? toSafeGuid(link, title),
-        title,
-        link,
-        summary: item.contentSnippet ?? item.content ?? null,
-        publishedAt: item.isoDate ?? item.pubDate ?? null
+        title: parsed.title ?? candidateFeedUrl,
+        url: parsed.link ?? candidateFeedUrl,
+        feedUrl: candidateFeedUrl,
+        discoveryStrategy: discovery.strategyName,
+        items: (parsed.items ?? []).map((item) => {
+          const link = item.link ?? "";
+          const title = item.title ?? "(제목 없음)";
+          return {
+            guid: item.guid ?? toSafeGuid(link, title),
+            title,
+            link,
+            summary: item.contentSnippet ?? item.content ?? null,
+            publishedAt: item.isoDate ?? item.pubDate ?? null
+          };
+        })
       };
-    })
-  };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push(`${candidateFeedUrl} => ${message}`);
+    }
+  }
+
+  const compactErrors = errors.slice(0, 4).join(" | ");
+  throw new Error(
+    `RSS 발견/파싱 실패 (strategy=${discovery.strategyName}, attempts=${discovery.candidates.length}): ${compactErrors}`
+  );
 };

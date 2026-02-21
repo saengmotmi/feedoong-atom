@@ -46,16 +46,22 @@ fnm install 22.22.0
 fnm use 22.22.0
 ```
 
-터미널 3개에서 실행:
+최소 로컬 동작(웹+API)은 한 번에 실행:
+
+```bash
+yarn dev:local
+```
+
+- Web: <http://localhost:5173>
+- API: <http://localhost:4000/health>
+
+전체 개발(웹+API+스케줄러)은 터미널 3개:
 
 ```bash
 yarn dev:api
 yarn dev:scheduler
 yarn dev:web
 ```
-
-- Web: <http://localhost:5173>
-- API: <http://localhost:4000/health>
 
 Cloudflare 런타임으로 로컬 검증할 때:
 
@@ -64,6 +70,25 @@ yarn dev:web:edge
 ```
 
 - Edge Web: <http://localhost:8788>
+
+로컬 최소 정상동작 스모크 테스트:
+
+```bash
+yarn smoke:local
+```
+
+기존 구독 CSV(기본: `~/Downloads/feedoong_subscriptions_ohjtack@gmail.com.csv`) 가져오기:
+
+```bash
+yarn dev:api
+yarn import:subscriptions
+```
+
+다른 경로 CSV를 쓸 때:
+
+```bash
+yarn import:subscriptions /path/to/subscriptions.csv
+```
 
 ## Frontend Notes (`apps/web`)
 

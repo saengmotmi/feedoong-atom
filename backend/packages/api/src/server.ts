@@ -16,6 +16,21 @@ const SCHEDULER_KEY = process.env.SCHEDULER_KEY ?? "";
 const db = new FeedoongDb(DB_PATH);
 const app = express();
 
+const withAsync =
+  (
+    handler: (
+      request: express.Request,
+      response: express.Response
+    ) => Promise<void>
+  ) =>
+  (
+    request: express.Request,
+    response: express.Response,
+    next: express.NextFunction
+  ) => {
+    handler(request, response).catch(next);
+  };
+
 const allowedOrigins = WEB_ORIGIN === "*"
   ? true
   : WEB_ORIGIN.split(",").map((origin) => origin.trim());
@@ -38,7 +53,7 @@ app.get("/v1/sources", (_request, response) => {
   response.json({ sources: db.listSources() });
 });
 
-app.post("/v1/sources", async (request, response) => {
+app.post("/v1/sources", withAsync(async (request, response) => {
   const body = z
     .object({
       url: z.string().url()
@@ -47,7 +62,7 @@ app.post("/v1/sources", async (request, response) => {
 
   try {
     const parsed = await parseFeed(body.url);
-    const source = db.addSource(body.url, parsed.title);
+    const source = db.addSource(parsed.feedUrl, parsed.title);
     response.status(201).json({ source });
   } catch (error) {
     if (error instanceof Error && error.message === "DUPLICATE_SOURCE_URL") {
@@ -56,9 +71,13 @@ app.post("/v1/sources", async (request, response) => {
       });
       return;
     }
-    throw error;
+
+    const message = error instanceof Error ? error.message : "RSS를 불러올 수 없습니다.";
+    response.status(422).json({
+      message: `RSS를 등록할 수 없습니다: ${message}`
+    });
   }
-});
+}));
 
 app.get("/v1/items", (request, response) => {
   const query = z
@@ -72,7 +91,7 @@ app.get("/v1/items", (request, response) => {
   response.json({ items });
 });
 
-app.post("/v1/sync", async (request, response) => {
+app.post("/v1/sync", withAsync(async (request, response) => {
   const body = z
     .object({
       sourceId: z.coerce.number().int().positive().optional()
@@ -91,9 +110,9 @@ app.post("/v1/sync", async (request, response) => {
 
   const result = await syncAllSources(db);
   response.json(result);
-});
+}));
 
-app.post("/internal/sync", async (request, response) => {
+app.post("/internal/sync", withAsync(async (request, response) => {
   if (SCHEDULER_KEY) {
     const key = request.header("x-scheduler-key");
     if (key !== SCHEDULER_KEY) {
@@ -104,7 +123,7 @@ app.post("/internal/sync", async (request, response) => {
 
   const result = await syncAllSources(db);
   response.json(result);
-});
+}));
 
 app.use(
   (

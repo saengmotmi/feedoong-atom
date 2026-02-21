@@ -11,6 +11,9 @@
     "dev:web:edge": "yarn workspace @feedoong/web dev:edge",
     "dev:api": "yarn workspace @feedoong/api dev",
     "dev:scheduler": "yarn workspace @feedoong/scheduler dev",
+    "dev:local": "./scripts/dev-local.sh",
+    "smoke:local": "./scripts/smoke-local.sh",
+    "import:subscriptions": "node ./scripts/import-subscriptions.mjs",
     "build": "yarn workspace @feedoong/web build && yarn workspace @feedoong/api build && yarn workspace @feedoong/scheduler build",
     "typecheck": "yarn workspace @feedoong/web typecheck && yarn workspace @feedoong/api typecheck && yarn workspace @feedoong/scheduler typecheck"
   },

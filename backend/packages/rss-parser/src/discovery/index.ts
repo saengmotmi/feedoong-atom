@@ -1,0 +1,36 @@
+import { defaultStrategy } from "./strategies/default.js";
+import { mediumStrategy } from "./strategies/medium.js";
+import { tistoryStrategy } from "./strategies/tistory.js";
+import { velogStrategy } from "./strategies/velog.js";
+import { youtubeStrategy } from "./strategies/youtube.js";
+import type { DiscoveryResult, FeedDiscoveryStrategy } from "./types.js";
+import { uniqueUrls } from "./utils.js";
+
+const DOMAIN_STRATEGIES: FeedDiscoveryStrategy[] = [
+  velogStrategy,
+  tistoryStrategy,
+  mediumStrategy,
+  youtubeStrategy
+];
+
+export const discoverFeedCandidates = async (rawUrl: string): Promise<DiscoveryResult> => {
+  const inputUrl = new URL(rawUrl);
+  const strategy = DOMAIN_STRATEGIES.find((candidate) => candidate.matches(inputUrl));
+
+  if (!strategy) {
+    return {
+      strategyName: defaultStrategy.name,
+      candidates: await defaultStrategy.getCandidates(inputUrl)
+    };
+  }
+
+  const [domainCandidates, fallbackCandidates] = await Promise.all([
+    strategy.getCandidates(inputUrl),
+    defaultStrategy.getCandidates(inputUrl)
+  ]);
+
+  return {
+    strategyName: strategy.name,
+    candidates: uniqueUrls([...domainCandidates, ...fallbackCandidates])
+  };
+};
