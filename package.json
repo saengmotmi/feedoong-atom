@@ -1,0 +1,21 @@
+{
+  "name": "feedoong-solo",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "backend/packages/*"
+  ],
+  "scripts": {
+    "dev:web": "yarn workspace @feedoong/web dev",
+    "dev:web:edge": "yarn workspace @feedoong/web dev:edge",
+    "dev:api": "yarn workspace @feedoong/api dev",
+    "dev:scheduler": "yarn workspace @feedoong/scheduler dev",
+    "build": "yarn workspace @feedoong/web build && yarn workspace @feedoong/api build && yarn workspace @feedoong/scheduler build",
+    "typecheck": "yarn workspace @feedoong/web typecheck && yarn workspace @feedoong/api typecheck && yarn workspace @feedoong/scheduler typecheck"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "packageManager": "yarn@4.12.0"
+}

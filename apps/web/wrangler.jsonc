@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "feedoong-solo-web",
+  "compatibility_date": "2026-02-19",
+  "main": "./build/server/index.js",
+  "assets": {
+    "directory": "./build/client"
+  },
+  "vars": {
+    "API_BASE_URL": "http://localhost:4000",
+    "CACHE_TTL_SECONDS": "60"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
+}

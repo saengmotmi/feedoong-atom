@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "Feedoong Solo New Tab",
+  "version": "0.1.0",
+  "description": "새 탭에서 Feedoong Solo 웹 앱으로 이동합니다.",
+  "chrome_url_overrides": {
+    "newtab": "newtab.html"
+  }
+}
