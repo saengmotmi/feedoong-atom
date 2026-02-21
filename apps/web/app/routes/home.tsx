@@ -21,8 +21,21 @@ type FeedItem = {
   createdAt: string;
 };
 
+type ApiServiceBinding = {
+  fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+};
+
+type RouteContextWithApiService = {
+  apiService?: ApiServiceBinding;
+};
+
+type GlobalWithApiService = typeof globalThis & {
+  __FEEDOONG_API_SERVICE?: ApiServiceBinding;
+};
+
 const DEFAULT_CACHE_TTL_SECONDS = 60;
 const DEFAULT_STALE_SECONDS = 300;
+const SERVICE_BINDING_BASE_URL = "http://api.internal";
 
 const buildCacheControl = (ttlSeconds: number) =>
   `public, max-age=0, s-maxage=${ttlSeconds}, stale-while-revalidate=${DEFAULT_STALE_SECONDS}`;
@@ -32,7 +45,8 @@ const makeApiUrl = (baseUrl: string, path: string) => `${baseUrl}${path}`;
 const fetchJson = async <T,>(
   url: string,
   init?: RequestInit,
-  cacheTtlSeconds?: number
+  cacheTtlSeconds?: number,
+  fetchImpl: typeof fetch = fetch
 ): Promise<T> => {
   const requestInit: RequestInit & { cf?: Record<string, unknown> } = {
     ...init
@@ -45,7 +59,7 @@ const fetchJson = async <T,>(
     };
   }
 
-  const response = await fetch(url, requestInit);
+  const response = await fetchImpl(url, requestInit);
 
   if (!response.ok) {
     const message = await response.text();
@@ -53,6 +67,17 @@ const fetchJson = async <T,>(
   }
 
   return response.json() as Promise<T>;
+};
+
+const getApiServiceBinding = (context: unknown): ApiServiceBinding | null => {
+  const globalApiService =
+    (globalThis as GlobalWithApiService).__FEEDOONG_API_SERVICE ?? null;
+  if (globalApiService) {
+    return globalApiService;
+  }
+
+  const routeContext = context as RouteContextWithApiService;
+  return routeContext.apiService ?? null;
 };
 
 const parseStatusLabel = (status: string | null) => {
@@ -78,7 +103,11 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:4000";
+  const apiService = getApiServiceBinding(context);
+  const apiBaseUrl = apiService
+    ? SERVICE_BINDING_BASE_URL
+    : process.env.API_BASE_URL ?? "http://localhost:4000";
+  const apiFetch = apiService?.fetch.bind(apiService) ?? fetch;
   const ttlSeconds = Number(
     process.env.CACHE_TTL_SECONDS ?? DEFAULT_CACHE_TTL_SECONDS
   );
@@ -91,12 +120,14 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       fetchJson<{ sources: Source[] }>(
         makeApiUrl(apiBaseUrl, "/v1/sources"),
         undefined,
-        ttlSeconds
+        ttlSeconds,
+        apiFetch
       ),
       fetchJson<{ items: FeedItem[] }>(
         makeApiUrl(apiBaseUrl, "/v1/items?limit=100&offset=0"),
         undefined,
-        ttlSeconds
+        ttlSeconds,
+        apiFetch
       )
     ]);
 
@@ -137,7 +168,11 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 export async function action({ request, context }: Route.ActionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent");
-  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:4000";
+  const apiService = getApiServiceBinding(context);
+  const apiBaseUrl = apiService
+    ? SERVICE_BINDING_BASE_URL
+    : process.env.API_BASE_URL ?? "http://localhost:4000";
+  const apiFetch = apiService?.fetch.bind(apiService) ?? fetch;
 
   if (intent === "add-source") {
     const url = String(formData.get("url") ?? "").trim();
@@ -152,7 +187,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           "content-type": "application/json"
         },
         body: JSON.stringify({ url })
-      });
+      }, undefined, apiFetch);
       return redirect("/?status=source-added");
     } catch (_error) {
       return redirect("/?status=source-error");
@@ -167,7 +202,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           "content-type": "application/json"
         },
         body: "{}"
-      });
+      }, undefined, apiFetch);
       return redirect("/?status=synced");
     } catch (_error) {
       return redirect("/?status=sync-error");

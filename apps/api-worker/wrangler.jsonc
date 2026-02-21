@@ -1,0 +1,23 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "feedoong-atom-api",
+	"compatibility_date": "2026-02-21",
+	"main": "./src/index.ts",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"vars": {
+		"WEB_ORIGIN": "https://feedoong-atom-web.ohjtack.workers.dev",
+		"SCHEDULER_KEY": ""
+	},
+	"kv_namespaces": [
+		{
+			"binding": "FEEDOONG_DB",
+			"id": "14fb78bffa8640518ccb995c228635c6",
+			"remote": true
+		}
+	],
+	"observability": {
+		"enabled": true
+	}
+}
