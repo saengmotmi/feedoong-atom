@@ -1,5 +1,8 @@
+import { brunchStrategy } from "./strategies/brunch.js";
+import { chromeDevStrategy } from "./strategies/chrome-dev.js";
 import { defaultStrategy } from "./strategies/default.js";
 import { mediumStrategy } from "./strategies/medium.js";
+import { naverBlogStrategy } from "./strategies/naver-blog.js";
 import { tistoryStrategy } from "./strategies/tistory.js";
 import { velogStrategy } from "./strategies/velog.js";
 import { youtubeStrategy } from "./strategies/youtube.js";
@@ -8,6 +11,9 @@ import { uniqueUrls } from "./utils.js";
 
 const DOMAIN_STRATEGIES: FeedDiscoveryStrategy[] = [
   velogStrategy,
+  naverBlogStrategy,
+  brunchStrategy,
+  chromeDevStrategy,
   tistoryStrategy,
   mediumStrategy,
   youtubeStrategy

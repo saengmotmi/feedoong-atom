@@ -21,6 +21,17 @@ const extractChannelIdFromPath = (inputUrl: URL) => {
   return pathSegments[1];
 };
 
+const extractHandleFromPath = (inputUrl: URL) => {
+  const pathSegments = inputUrl.pathname.split("/").filter(Boolean);
+  const maybeHandle = pathSegments[0];
+  if (!maybeHandle || !maybeHandle.startsWith("@")) {
+    return null;
+  }
+
+  const handle = maybeHandle.slice(1).trim();
+  return handle.length > 0 ? handle : null;
+};
+
 export const youtubeStrategy: FeedDiscoveryStrategy = {
   name: "youtube",
   matches: (inputUrl) => {
@@ -31,15 +42,37 @@ export const youtubeStrategy: FeedDiscoveryStrategy = {
     const channelIdFromQuery = inputUrl.searchParams.get("channel_id");
     const channelIdFromPath = extractChannelIdFromPath(inputUrl);
     const channelId = channelIdFromQuery ?? channelIdFromPath;
+    const handle = extractHandleFromPath(inputUrl);
 
     const directFeedUrl = channelId
       ? `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`
       : null;
+    const userFeedUrl = handle
+      ? `https://www.youtube.com/feeds/videos.xml?user=${encodeURIComponent(handle)}`
+      : null;
 
     const canonicalUrl = toYoutubeWatchlessUrl(inputUrl);
-    const htmlDiscoveryTarget = new URL(canonicalUrl ?? inputUrl.toString());
-    const htmlCandidates = await discoverFeedLinksFromHtml(htmlDiscoveryTarget);
+    const canonicalInputUrl = new URL(canonicalUrl ?? inputUrl.toString());
+    const handleVideosUrl = handle
+      ? `https://www.youtube.com/@${encodeURIComponent(handle)}/videos`
+      : null;
+    const htmlDiscoveryTargets = uniqueUrls([
+      canonicalInputUrl.toString(),
+      handleVideosUrl ?? ""
+    ]);
+    const htmlCandidateMatrix = await Promise.all(
+      htmlDiscoveryTargets.map((targetUrl) =>
+        discoverFeedLinksFromHtml(new URL(targetUrl))
+      )
+    );
+    const htmlCandidates = htmlCandidateMatrix.flat();
 
-    return uniqueUrls([inputUrl.toString(), directFeedUrl ?? "", ...htmlCandidates]);
+    return uniqueUrls([
+      directFeedUrl ?? "",
+      userFeedUrl ?? "",
+      ...htmlCandidates,
+      canonicalInputUrl.toString(),
+      inputUrl.toString()
+    ]);
   }
 };

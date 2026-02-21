@@ -25,6 +25,6 @@ export const mediumStrategy: FeedDiscoveryStrategy = {
       ? `${inputUrl.origin}/feed/${feedTarget}`
       : null;
 
-    return uniqueUrls([inputUrl.toString(), derivedFeedUrl ?? ""]);
+    return uniqueUrls([derivedFeedUrl ?? "", inputUrl.toString()]);
   }
 };
