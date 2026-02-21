@@ -1,4 +1,4 @@
-# Feedoong Solo
+# Feedoong Atom
 
 혼자 운영 가능한 RSS 인사이트 피드 서비스 모노레포입니다.
 
@@ -28,7 +28,7 @@ infra/
 ## Quick Start
 
 ```bash
-cd /Users/ohjongtaek/Desktop/dev/feedoong-solo
+cd /Users/ohjongtaek/Desktop/dev/feedoong-atom
 fnm use
 yarn install
 
@@ -97,7 +97,7 @@ yarn import:subscriptions /path/to/subscriptions.csv
 - 실행 모드 분리:
   - 개발: `react-router dev` (RSC 프레임워크 모드)
   - 엣지 검증/배포: `wrangler`가 `build/server/index.js` + `build/client`를 서빙
-- 워커 설정: `/Users/ohjongtaek/Desktop/dev/feedoong-solo/apps/web/wrangler.jsonc`
+- 워커 설정: `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/web/wrangler.jsonc`
 - API 원점: `vars.API_BASE_URL`
 - 캐시 TTL: `vars.CACHE_TTL_SECONDS` (기본 60초)
 

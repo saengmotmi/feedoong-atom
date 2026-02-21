@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "feedoong-solo-web",
+  "name": "feedoong-atom-web",
   "compatibility_date": "2026-02-19",
   "main": "./build/server/index.js",
   "assets": {

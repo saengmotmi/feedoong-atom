@@ -71,7 +71,7 @@ if grep -Eq 'fetch failed|Network connection lost' <<<"$WEB_HTML"; then
   exit 1
 fi
 
-if ! grep -q 'Feedoong Solo' <<<"$WEB_HTML"; then
+if ! grep -q 'Feedoong Atom' <<<"$WEB_HTML"; then
   echo "[smoke] Web page marker was not found"
   exit 1
 fi

@@ -1,6 +1,6 @@
-# Feedoong Solo Extension
+# Feedoong Atom Extension
 
-크롬 새 탭을 Feedoong Solo 웹 앱으로 연결하는 최소 확장입니다.
+크롬 새 탭을 Feedoong Atom 웹 앱으로 연결하는 최소 확장입니다.
 
 ## 개발 메모
 

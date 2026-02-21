@@ -1,7 +1,7 @@
 # DEBUG: RRv7 RSC + Cloudflare 결합 이슈
 
 - 작성일: 2026-02-21
-- 대상: `/Users/ohjongtaek/Desktop/dev/feedoong-solo/apps/web`
+- 대상: `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/web`
 
 ## 1) 정상동작/현재동작 고정
 

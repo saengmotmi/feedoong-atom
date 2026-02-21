@@ -4,7 +4,7 @@ import type { Route } from "./+types/root";
 import "./app.css";
 
 export const meta: Route.MetaFunction = () => [
-  { title: "Feedoong Solo" },
+  { title: "Feedoong Atom" },
   {
     name: "description",
     content: "Vite + React Router v7 RSC + Cloudflare 기반 개인 RSS 피드"

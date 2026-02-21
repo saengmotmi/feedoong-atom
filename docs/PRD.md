@@ -1,4 +1,4 @@
-# PRD: Feedoong Solo
+# PRD: Feedoong Atom
 
 - 문서 버전: v0.2
 - 작성일: 2026-02-21
@@ -76,7 +76,7 @@
 
 기대 결과:
 1. 웹 응답 상태 `200`
-2. 화면에 앱 타이틀(`Feedoong Solo`) 렌더링
+2. 화면에 앱 타이틀(`Feedoong Atom`) 렌더링
 3. API 에러 문구(`fetch failed`, `Network connection lost`)가 표시되지 않음
 4. 아이템 목록은 최신순(publishedAt 우선, 없으면 createdAt)으로 표시
 5. 각 아이템 클릭 시 원문 링크 새 탭 이동 가능

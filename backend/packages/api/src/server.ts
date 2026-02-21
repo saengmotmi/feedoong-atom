@@ -1,8 +1,9 @@
 import "dotenv/config";
 
-import cors from "cors";
-import express from "express";
+import { serve } from "@hono/node-server";
 import { parseFeed } from "@feedoong/rss-parser";
+import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { z } from "zod";
 
 import { FeedoongDb } from "./db.js";
@@ -12,141 +13,130 @@ const PORT = Number(process.env.PORT ?? 4000);
 const WEB_ORIGIN = process.env.WEB_ORIGIN ?? "http://localhost:5173";
 const DB_PATH = process.env.DB_PATH ?? "./data/feedoong.json";
 const SCHEDULER_KEY = process.env.SCHEDULER_KEY ?? "";
+const INVALID_JSON_BODY_ERROR = "INVALID_JSON_BODY";
 
 const db = new FeedoongDb(DB_PATH);
-const app = express();
+const app = new Hono();
 
-const withAsync =
-  (
-    handler: (
-      request: express.Request,
-      response: express.Response
-    ) => Promise<void>
-  ) =>
-  (
-    request: express.Request,
-    response: express.Response,
-    next: express.NextFunction
-  ) => {
-    handler(request, response).catch(next);
-  };
+const sourceBodySchema = z.object({
+  url: z.string().url()
+});
+
+const itemsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0)
+});
+
+const syncBodySchema = z.object({
+  sourceId: z.coerce.number().int().positive().optional()
+});
+
+const readJsonBody = async (request: Request): Promise<unknown> => {
+  const rawBody = await request.text();
+  if (rawBody.trim().length === 0) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(rawBody) as unknown;
+  } catch (_error) {
+    throw new Error(INVALID_JSON_BODY_ERROR);
+  }
+};
 
 const allowedOrigins = WEB_ORIGIN === "*"
-  ? true
+  ? "*"
   : WEB_ORIGIN.split(",").map((origin) => origin.trim());
 
-app.use(
-  cors({
-    origin: allowedOrigins
-  })
-);
-app.use(express.json());
+app.use("*", cors({ origin: allowedOrigins }));
 
-app.get("/health", (_request, response) => {
-  response.json({
+app.get("/health", (context) =>
+  context.json({
     ok: true,
     now: new Date().toISOString()
-  });
-});
+  }));
 
-app.get("/v1/sources", (_request, response) => {
-  response.json({ sources: db.listSources() });
-});
+app.get("/v1/sources", (context) => context.json({ sources: db.listSources() }));
 
-app.post("/v1/sources", withAsync(async (request, response) => {
-  const body = z
-    .object({
-      url: z.string().url()
-    })
-    .parse(request.body);
+app.post("/v1/sources", async (context) => {
+  const body = sourceBodySchema.parse(await readJsonBody(context.req.raw));
 
   try {
     const parsed = await parseFeed(body.url);
     const source = db.addSource(parsed.feedUrl, parsed.title);
-    response.status(201).json({ source });
+    return context.json({ source }, 201);
   } catch (error) {
     if (error instanceof Error && error.message === "DUPLICATE_SOURCE_URL") {
-      response.status(409).json({
+      return context.json({
         message: "이미 등록된 RSS URL입니다."
-      });
-      return;
+      }, 409);
     }
 
     const message = error instanceof Error ? error.message : "RSS를 불러올 수 없습니다.";
-    response.status(422).json({
+    return context.json({
       message: `RSS를 등록할 수 없습니다: ${message}`
-    });
+    }, 422);
   }
-}));
-
-app.get("/v1/items", (request, response) => {
-  const query = z
-    .object({
-      limit: z.coerce.number().int().min(1).max(200).default(50),
-      offset: z.coerce.number().int().min(0).default(0)
-    })
-    .parse(request.query);
-
-  const items = db.listItems(query.limit, query.offset);
-  response.json({ items });
 });
 
-app.post("/v1/sync", withAsync(async (request, response) => {
-  const body = z
-    .object({
-      sourceId: z.coerce.number().int().positive().optional()
-    })
-    .parse(request.body ?? {});
+app.get("/v1/items", (context) => {
+  const query = itemsQuerySchema.parse(context.req.query());
+
+  const items = db.listItems(query.limit, query.offset);
+  return context.json({ items });
+});
+
+app.post("/v1/sync", async (context) => {
+  const body = syncBodySchema.parse(await readJsonBody(context.req.raw));
 
   if (body.sourceId) {
     const detail = await syncOneSource(db, body.sourceId);
-    response.json({
+    return context.json({
       syncedSources: 1,
       totalInserted: detail.inserted,
       details: [detail]
     });
-    return;
   }
 
   const result = await syncAllSources(db);
-  response.json(result);
-}));
+  return context.json(result);
+});
 
-app.post("/internal/sync", withAsync(async (request, response) => {
+app.post("/internal/sync", async (context) => {
   if (SCHEDULER_KEY) {
-    const key = request.header("x-scheduler-key");
+    const key = context.req.header("x-scheduler-key");
     if (key !== SCHEDULER_KEY) {
-      response.status(401).json({ message: "Invalid scheduler key" });
-      return;
+      return context.json({ message: "Invalid scheduler key" }, 401);
     }
   }
 
   const result = await syncAllSources(db);
-  response.json(result);
-}));
+  return context.json(result);
+});
 
-app.use(
-  (
-    error: unknown,
-    _request: express.Request,
-    response: express.Response,
-    _next: express.NextFunction
-  ) => {
-    if (error instanceof z.ZodError) {
-      response.status(400).json({
-        message: "Invalid request",
-        issues: error.issues
-      });
-      return;
-    }
-
-    const message =
-      error instanceof Error ? error.message : "알 수 없는 서버 에러";
-    console.error(error);
-    response.status(500).json({ message });
+app.onError((error, context) => {
+  if (error instanceof z.ZodError) {
+    return context.json({
+      message: "Invalid request",
+      issues: error.issues
+    }, 400);
   }
-);
 
-app.listen(PORT, () => {
-  console.log(`[api] listening on http://localhost:${PORT}`);
+  if (error instanceof Error && error.message === INVALID_JSON_BODY_ERROR) {
+    return context.json({
+      message: "Invalid request"
+    }, 400);
+  }
+
+  const message =
+    error instanceof Error ? error.message : "알 수 없는 서버 에러";
+  console.error(error);
+  return context.json({ message }, 500);
+});
+
+serve({
+  fetch: app.fetch,
+  port: PORT
+}, (info) => {
+  console.log(`[api] listening on http://localhost:${info.port}`);
 });

@@ -72,7 +72,7 @@ const parseStatusLabel = (status: string | null) => {
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Feedoong Solo | RSC" },
+    { title: "Feedoong Atom | RSC" },
     { name: "description", content: "Cloudflare Edge에서 캐시되는 개인 RSS 피드" }
   ];
 }
@@ -183,7 +183,7 @@ export async function ServerComponent({ loaderData }: Route.ComponentProps) {
   return (
     <main className="container">
       <section className="hero">
-        <h1>Feedoong Solo</h1>
+        <h1>Feedoong Atom</h1>
         <p>Vite + RRv7 Framework + RSC + Cloudflare Edge Cache</p>
       </section>
 
