@@ -3,6 +3,7 @@ import type { ParsedFeedItem } from "../index.js";
 const DEFAULT_X_API_BASE = "https://api.x.com/2";
 const DEFAULT_MAX_RESULTS = 100;
 const MAX_ALLOWED_RESULTS = 100;
+const DEFAULT_TIMEOUT_MS = 10_000;
 
 type XUser = {
   id: string;
@@ -46,41 +47,12 @@ type XMentionsResponse = {
   }>;
 };
 
-const asGlobal = () =>
-  globalThis as typeof globalThis & {
-    __FEEDOONG_X_BEARER_TOKEN?: string;
-    __FEEDOONG_X_API_BASE_URL?: string;
-    __FEEDOONG_X_MENTIONS_MAX_RESULTS?: string | number;
-  };
-
-const getFromProcess = (key: string) => {
-  if (typeof process === "undefined" || !("env" in process)) {
-    return undefined;
-  }
-  return process.env?.[key];
-};
-
-const getXBearerToken = () => {
-  const globalValue = asGlobal().__FEEDOONG_X_BEARER_TOKEN;
-  const processValue = getFromProcess("X_BEARER_TOKEN");
-  return (globalValue ?? processValue ?? "").trim();
-};
-
-const getXApiBaseUrl = () => {
-  const globalValue = asGlobal().__FEEDOONG_X_API_BASE_URL;
-  const processValue = getFromProcess("X_API_BASE_URL");
-  return (globalValue ?? processValue ?? DEFAULT_X_API_BASE).replace(/\/$/, "");
-};
-
-const getMaxResults = () => {
-  const globalValue = asGlobal().__FEEDOONG_X_MENTIONS_MAX_RESULTS;
-  const processValue = getFromProcess("X_MENTIONS_MAX_RESULTS");
-  const raw = globalValue ?? processValue ?? DEFAULT_MAX_RESULTS;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return DEFAULT_MAX_RESULTS;
-  }
-  return Math.min(MAX_ALLOWED_RESULTS, Math.floor(parsed));
+export type XMentionsProviderConfig = {
+  token: string;
+  apiBaseUrl?: string;
+  maxResults?: number | string;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
 };
 
 const parseUsernameFromCandidateUrl = (candidateUrl: string) => {
@@ -114,6 +86,34 @@ const toQueryString = (params: Record<string, string | number | undefined>) => {
   return searchParams.toString();
 };
 
+const resolveFetch = (fetchImpl?: typeof fetch) => {
+  if (fetchImpl) {
+    return fetchImpl;
+  }
+  if (typeof fetch !== "function") {
+    throw new Error("fetch is not available in the current runtime");
+  }
+  return fetch;
+};
+
+const createTimeoutSignal = (timeoutMs: number): AbortSignal => {
+  if (typeof AbortSignal.timeout === "function") {
+    return AbortSignal.timeout(timeoutMs);
+  }
+
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), timeoutMs);
+  return controller.signal;
+};
+
+const normalizeMaxResults = (value: number | string | undefined) => {
+  const parsed = Number(value ?? DEFAULT_MAX_RESULTS);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_MAX_RESULTS;
+  }
+  return Math.min(MAX_ALLOWED_RESULTS, Math.floor(parsed));
+};
+
 const readJsonOrThrow = async <T>(response: Response): Promise<T> => {
   const text = await response.text();
   if (!response.ok) {
@@ -130,16 +130,18 @@ const readJsonOrThrow = async <T>(response: Response): Promise<T> => {
 const resolveTargetUser = async (
   baseUrl: string,
   token: string,
-  username: string
+  username: string,
+  fetcher: typeof fetch,
+  timeoutMs: number
 ): Promise<XUser> => {
   const userLookupQuery = toQueryString({
     "user.fields": "username,name"
   });
   const userLookupUrl =
     `${baseUrl}/users/by/username/${encodeURIComponent(username)}?${userLookupQuery}`;
-  const response = await fetch(userLookupUrl, {
+  const response = await fetcher(userLookupUrl, {
     headers: buildAuthHeaders(token),
-    signal: AbortSignal.timeout(10_000)
+    signal: createTimeoutSignal(timeoutMs)
   });
   const payload = await readJsonOrThrow<XUserLookupResponse>(response);
   if (!payload.data) {
@@ -194,8 +196,11 @@ const buildItems = (
       };
     });
 
-export const parseXMentionsFeed = async (candidateUrl: string) => {
-  const token = getXBearerToken();
+export const parseXMentionsFeed = async (
+  candidateUrl: string,
+  config: XMentionsProviderConfig
+) => {
+  const token = config.token.trim();
   if (!token) {
     throw new Error(
       "X Mentions 전략 사용을 위해 X_BEARER_TOKEN 환경 변수가 필요합니다."
@@ -207,19 +212,21 @@ export const parseXMentionsFeed = async (candidateUrl: string) => {
     throw new Error("x-mentions URL에서 username을 추출할 수 없습니다.");
   }
 
-  const baseUrl = getXApiBaseUrl();
-  const targetUser = await resolveTargetUser(baseUrl, token, targetUsername);
+  const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const fetcher = resolveFetch(config.fetchImpl);
+  const baseUrl = (config.apiBaseUrl ?? DEFAULT_X_API_BASE).replace(/\/$/, "");
+  const targetUser = await resolveTargetUser(baseUrl, token, targetUsername, fetcher, timeoutMs);
   const mentionsQuery = toQueryString({
-    max_results: getMaxResults(),
+    max_results: normalizeMaxResults(config.maxResults),
     "tweet.fields": "created_at,author_id,referenced_tweets,entities",
     expansions: "author_id",
     "user.fields": "username,name"
   });
   const mentionsUrl = `${baseUrl}/users/${targetUser.id}/mentions?${mentionsQuery}`;
 
-  const mentionsResponse = await fetch(mentionsUrl, {
+  const mentionsResponse = await fetcher(mentionsUrl, {
     headers: buildAuthHeaders(token),
-    signal: AbortSignal.timeout(10_000)
+    signal: createTimeoutSignal(timeoutMs)
   });
   const mentionsPayload = await readJsonOrThrow<XMentionsResponse>(mentionsResponse);
   const usersById = new Map(

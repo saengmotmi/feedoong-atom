@@ -1,5 +1,12 @@
 import "dotenv/config";
 
+import {
+  INVALID_JSON_BODY_ERROR,
+  itemsQuerySchema,
+  readJsonBody,
+  sourceBodySchema,
+  syncBodySchema
+} from "@feedoong/contracts";
 import { serve } from "@hono/node-server";
 import { parseFeed } from "@feedoong/rss-parser";
 import { Hono } from "hono";
@@ -13,36 +20,18 @@ const PORT = Number(process.env.PORT ?? 4000);
 const WEB_ORIGIN = process.env.WEB_ORIGIN ?? "http://localhost:5173";
 const DB_PATH = process.env.DB_PATH ?? "./data/feedoong.json";
 const SCHEDULER_KEY = process.env.SCHEDULER_KEY ?? "";
-const INVALID_JSON_BODY_ERROR = "INVALID_JSON_BODY";
 
 const db = new FeedoongDb(DB_PATH);
 const app = new Hono();
 
-const sourceBodySchema = z.object({
-  url: z.string().url()
-});
-
-const itemsQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(200).default(50),
-  offset: z.coerce.number().int().min(0).default(0)
-});
-
-const syncBodySchema = z.object({
-  sourceId: z.coerce.number().int().positive().optional()
-});
-
-const readJsonBody = async (request: Request): Promise<unknown> => {
-  const rawBody = await request.text();
-  if (rawBody.trim().length === 0) {
-    return {};
-  }
-
-  try {
-    return JSON.parse(rawBody) as unknown;
-  } catch (_error) {
-    throw new Error(INVALID_JSON_BODY_ERROR);
-  }
-};
+const createParseFeedPort = () => (url: string) =>
+  parseFeed(url, {
+    xMentions: {
+      token: process.env.X_BEARER_TOKEN ?? "",
+      apiBaseUrl: process.env.X_API_BASE_URL,
+      maxResults: process.env.X_MENTIONS_MAX_RESULTS
+    }
+  });
 
 const allowedOrigins = WEB_ORIGIN === "*"
   ? "*"
@@ -60,9 +49,10 @@ app.get("/v1/sources", (context) => context.json({ sources: db.listSources() }))
 
 app.post("/v1/sources", async (context) => {
   const body = sourceBodySchema.parse(await readJsonBody(context.req.raw));
+  const parseFeedPort = createParseFeedPort();
 
   try {
-    const parsed = await parseFeed(body.url);
+    const parsed = await parseFeedPort(body.url);
     const source = db.addSource(parsed.feedUrl, parsed.title);
     return context.json({ source }, 201);
   } catch (error) {
@@ -88,17 +78,23 @@ app.get("/v1/items", (context) => {
 
 app.post("/v1/sync", async (context) => {
   const body = syncBodySchema.parse(await readJsonBody(context.req.raw));
+  const parseFeedPort = createParseFeedPort();
 
   if (body.sourceId) {
-    const detail = await syncOneSource(db, body.sourceId);
+    const detail = await syncOneSource(db, body.sourceId, {
+      parseFeedPort
+    });
     return context.json({
       syncedSources: 1,
+      failedSources: 0,
       totalInserted: detail.inserted,
       details: [detail]
     });
   }
 
-  const result = await syncAllSources(db);
+  const result = await syncAllSources(db, {
+    parseFeedPort
+  });
   return context.json(result);
 });
 
@@ -110,7 +106,9 @@ app.post("/internal/sync", async (context) => {
     }
   }
 
-  const result = await syncAllSources(db);
+  const result = await syncAllSources(db, {
+    parseFeedPort: createParseFeedPort()
+  });
   return context.json(result);
 });
 

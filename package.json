@@ -13,9 +13,10 @@
     "dev:scheduler": "yarn workspace @feedoong/scheduler dev",
     "dev:local": "./scripts/dev-local.sh",
     "smoke:local": "./scripts/smoke-local.sh",
+    "check:architecture": "./scripts/check-architecture.sh",
     "import:subscriptions": "node ./scripts/import-subscriptions.mjs",
-    "build": "yarn workspace @feedoong/web build && yarn workspace @feedoong/sync-core build && yarn workspace @feedoong/api build && yarn workspace @feedoong/scheduler build",
-    "typecheck": "yarn workspace @feedoong/web typecheck && yarn workspace @feedoong/sync-core typecheck && yarn workspace @feedoong/api typecheck && yarn workspace @feedoong/scheduler typecheck"
+    "build": "yarn workspaces foreach -Apt run build",
+    "typecheck": "yarn workspaces foreach -Apt run typecheck && yarn check:architecture"
   },
   "engines": {
     "node": ">=20.19.0"

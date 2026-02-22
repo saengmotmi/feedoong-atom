@@ -5,6 +5,7 @@ import {
 } from "@feedoong/sync-core";
 
 import type { SyncDetail, SyncRepository } from "@feedoong/sync-core";
+import type { ParsedFeedResult } from "@feedoong/rss-parser";
 
 import type { FeedoongDb } from "./db.js";
 
@@ -20,18 +21,26 @@ const createRepository = (db: FeedoongDb): SyncRepository => ({
 
 export type { SyncDetail };
 
+type SyncOptions = {
+  parseFeedPort?: (url: string) => Promise<ParsedFeedResult>;
+};
+
+const resolveParseFeedPort = (options?: SyncOptions) =>
+  options?.parseFeedPort ?? ((url: string) => parseFeed(url));
+
 export const syncOneSource = async (
   db: FeedoongDb,
-  sourceId: number
+  sourceId: number,
+  options?: SyncOptions
 ): Promise<SyncDetail> =>
   runSyncOneSource({
     repository: createRepository(db),
     sourceId,
-    parseFeed
+    parseFeed: resolveParseFeedPort(options)
   });
 
-export const syncAllSources = async (db: FeedoongDb) =>
+export const syncAllSources = async (db: FeedoongDb, options?: SyncOptions) =>
   runSyncAllSources({
     repository: createRepository(db),
-    parseFeed
+    parseFeed: resolveParseFeedPort(options)
   });

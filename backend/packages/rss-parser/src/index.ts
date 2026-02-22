@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { discoverFeedCandidates } from "./discovery/index.js";
 import { parseXMentionsFeed } from "./providers/x-mentions.js";
+import type { XMentionsProviderConfig } from "./providers/x-mentions.js";
 
 export const rssUrlSchema = z.string().url();
 
@@ -22,6 +23,12 @@ export type ParsedFeedResult = {
   items: ParsedFeedItem[];
 };
 
+export type ParseFeedOptions = {
+  xMentions?: Partial<XMentionsProviderConfig> & {
+    token?: string;
+  };
+};
+
 const parser = new Parser();
 
 const toSafeGuid = (link: string, title: string) => `${link}::${title}`;
@@ -34,7 +41,10 @@ const isXMentionsCandidate = (candidateFeedUrl: string) => {
   }
 };
 
-export const parseFeed = async (url: string): Promise<ParsedFeedResult> => {
+export const parseFeed = async (
+  url: string,
+  options: ParseFeedOptions = {}
+): Promise<ParsedFeedResult> => {
   const inputUrl = rssUrlSchema.parse(url);
   const discovery = await discoverFeedCandidates(inputUrl);
   const errors: string[] = [];
@@ -42,7 +52,20 @@ export const parseFeed = async (url: string): Promise<ParsedFeedResult> => {
   for (const candidateFeedUrl of discovery.candidates) {
     try {
       if (isXMentionsCandidate(candidateFeedUrl)) {
-        const parsed = await parseXMentionsFeed(candidateFeedUrl);
+        const token = options.xMentions?.token?.trim() ?? "";
+        if (!token) {
+          throw new Error(
+            "X Mentions 전략 사용을 위해 X_BEARER_TOKEN 환경 변수가 필요합니다."
+          );
+        }
+
+        const parsed = await parseXMentionsFeed(candidateFeedUrl, {
+          token,
+          apiBaseUrl: options.xMentions?.apiBaseUrl,
+          maxResults: options.xMentions?.maxResults,
+          fetchImpl: options.xMentions?.fetchImpl,
+          timeoutMs: options.xMentions?.timeoutMs
+        });
         return {
           title: parsed.title,
           url: parsed.url,

@@ -754,6 +754,7 @@ __metadata:
   resolution: "@feedoong/api-worker@workspace:apps/api-worker"
   dependencies:
     "@cloudflare/workers-types": "npm:^4.20260218.0"
+    "@feedoong/contracts": "npm:0.1.0"
     "@feedoong/rss-parser": "npm:0.1.0"
     "@feedoong/sync-core": "npm:0.1.0"
     "@types/node": "npm:^22.19.11"
@@ -768,6 +769,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@feedoong/api@workspace:backend/packages/api"
   dependencies:
+    "@feedoong/contracts": "npm:0.1.0"
     "@feedoong/rss-parser": "npm:0.1.0"
     "@feedoong/sync-core": "npm:0.1.0"
     "@hono/node-server": "npm:^1.19.6"
@@ -775,6 +777,16 @@ __metadata:
     dotenv: "npm:16.4.5"
     hono: "npm:^4.10.2"
     tsx: "npm:4.19.1"
+    typescript: "npm:5.6.3"
+    zod: "npm:3.23.8"
+  languageName: unknown
+  linkType: soft
+
+"@feedoong/contracts@npm:0.1.0, @feedoong/contracts@workspace:backend/packages/contracts":
+  version: 0.0.0-use.local
+  resolution: "@feedoong/contracts@workspace:backend/packages/contracts"
+  dependencies:
+    "@types/node": "npm:20.16.11"
     typescript: "npm:5.6.3"
     zod: "npm:3.23.8"
   languageName: unknown

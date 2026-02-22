@@ -1,7 +1,7 @@
-# Feedoong Atom Architecture (v0.2)
+# Feedoong Atom Architecture (v0.3)
 
-- 문서 버전: v0.2
-- 작성일: 2026-02-21
+- 문서 버전: v0.3
+- 작성일: 2026-02-22
 - 범위: 개인 운영용 RSS 리더 MVP
 
 ## 1. 합의된 동작 기준
@@ -22,9 +22,11 @@
 flowchart LR
   U["User (Web/RSC)"] --> CF["Cloudflare Edge\n(CDN + Cache + WAF + Rate Limit)"]
   CF --> WEB["Web App\n(Vite + React Router v7 + RSC)"]
-  WEB --> API["API Service\n(Hono on Node)"]
-  API --> DB["Primary Store\n(JSON now -> SQLite/Postgres later)"]
-  API --> PARSER["RSS Parser Layer\n(Strategy Discovery + Parse Normalize)"]
+  WEB --> API["API Service\n(Hono on Node / Worker)"]
+  API --> CONTRACT["Contracts Layer\n(zod schema + DTO)"]
+  API --> CORE["Sync Core\n(head preflight + incremental sync)"]
+  CORE --> DB["Primary Store\n(JSON/KV now -> SQLite/Postgres later)"]
+  CORE --> PARSER["RSS Parser Layer\n(Strategy Discovery + Parse Normalize)"]
   SCH["Scheduler (Cron)"] --> API
   PARSER --> EXT["External Feeds\n(RSS/Atom/JSON Feed)"]
 ```
@@ -48,17 +50,30 @@ flowchart LR
 
 1. 소스/아이템/동기화 API 제공
 2. URL 등록 시 parser 레이어 호출 후 canonical feed URL 저장
-3. 동기화 작업 오케스트레이션
+3. `sync-core`를 호출하는 런타임 어댑터 역할 수행
 4. 에러를 사용자 메시지로 변환
 
-### 4.4 RSS Parser (`backend/packages/rss-parser`)
+### 4.4 Contracts (`backend/packages/contracts`)
+
+1. 요청/쿼리 zod 스키마 공통화
+2. JSON body 파싱과 에러 코드(`INVALID_JSON_BODY`) 공통화
+3. node API/worker 간 계약 일치 보장
+
+### 4.5 Sync Core (`backend/packages/sync-core`)
+
+1. HEAD preflight + 증분 동기화 로직의 단일 소스
+2. 저장소/파서 의존을 포트 인터페이스로 분리
+3. 런타임(node/worker) 비종속 도메인 유스케이스 제공
+
+### 4.6 RSS Parser (`backend/packages/rss-parser`)
 
 1. 입력 URL 기반 Discovery 전략 선택
 2. 후보 feed URL 생성 및 파싱 시도
 3. 파싱 결과를 내부 공통 스키마로 normalize
 4. 도메인 전략 패턴으로 규칙을 격리
+5. X Mentions 등 provider config는 전역 상태 대신 런타임에서 주입
 
-### 4.5 Scheduler (`backend/packages/scheduler`)
+### 4.7 Scheduler (`backend/packages/scheduler`)
 
 1. Cron 트리거
 2. `POST /internal/sync` 호출
@@ -229,3 +244,4 @@ sequenceDiagram
 3. 캐시 무효화 훅(`POST /v1/sync` 성공 후 purge)
 4. 도메인 전략 테스트 fixture 추가(CSV 샘플 기반)
 5. smoke 테스트에 최소 핵심 시나리오 포함
+6. 아키텍처 경계 체크(`yarn check:architecture`) CI 단계에 포함

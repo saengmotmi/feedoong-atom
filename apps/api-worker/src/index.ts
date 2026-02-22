@@ -1,3 +1,10 @@
+import {
+  INVALID_JSON_BODY_ERROR,
+  itemsQuerySchema,
+  readJsonBody,
+  sourceBodySchema,
+  syncBodySchema
+} from "@feedoong/contracts";
 import { parseFeed } from "@feedoong/rss-parser";
 import {
   syncAllSources as runSyncAllSources,
@@ -7,7 +14,13 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
 
-import type { ParsedFeedItem, SyncDetail, SyncRepository } from "@feedoong/sync-core";
+import type { ParsedFeedResult } from "@feedoong/rss-parser";
+import type {
+  ParseFeedPort,
+  ParsedFeedItem,
+  SyncDetail,
+  SyncRepository
+} from "@feedoong/sync-core";
 
 type SourceRow = {
   id: number;
@@ -48,27 +61,7 @@ type Bindings = {
   X_MENTIONS_MAX_RESULTS?: string;
 };
 
-type GlobalWithXMentionsConfig = typeof globalThis & {
-  __FEEDOONG_X_BEARER_TOKEN?: string;
-  __FEEDOONG_X_API_BASE_URL?: string;
-  __FEEDOONG_X_MENTIONS_MAX_RESULTS?: string;
-};
-
 const STORAGE_KEY = "feedoong.storage.v1";
-const INVALID_JSON_BODY_ERROR = "INVALID_JSON_BODY";
-
-const sourceBodySchema = z.object({
-  url: z.string().url()
-});
-
-const itemsQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(200).default(50),
-  offset: z.coerce.number().int().min(0).default(0)
-});
-
-const syncBodySchema = z.object({
-  sourceId: z.coerce.number().int().positive().optional()
-});
 
 const createInitialStorage = (): StorageShape => ({
   nextSourceId: 1,
@@ -241,43 +234,35 @@ const createRepository = (storage: StorageShape): SyncRepository => ({
     updateSourceCheckMetadata(storage, sourceId, checkedAt, headEtag, headLastModified)
 });
 
+const createParseFeedPort = (env: Bindings): ((url: string) => Promise<ParsedFeedResult>) => (url) =>
+  parseFeed(url, {
+    xMentions: {
+      token: env.X_BEARER_TOKEN ?? "",
+      apiBaseUrl: env.X_API_BASE_URL,
+      maxResults: env.X_MENTIONS_MAX_RESULTS
+    }
+  });
+
 const syncOneSource = async (
   storage: StorageShape,
-  sourceId: number
+  sourceId: number,
+  parseFeedPort: ParseFeedPort
 ): Promise<SyncDetail> =>
   runSyncOneSource({
     repository: createRepository(storage),
     sourceId,
-    parseFeed
+    parseFeed: parseFeedPort
   });
 
-const syncAllSources = async (storage: StorageShape) =>
+const syncAllSources = async (storage: StorageShape, parseFeedPort: ParseFeedPort) =>
   runSyncAllSources({
     repository: createRepository(storage),
-    parseFeed
+    parseFeed: parseFeedPort
   });
-
-const readJsonBody = async (request: Request): Promise<unknown> => {
-  const rawBody = await request.text();
-  if (rawBody.trim().length === 0) {
-    return {};
-  }
-
-  try {
-    return JSON.parse(rawBody) as unknown;
-  } catch (_error) {
-    throw new Error(INVALID_JSON_BODY_ERROR);
-  }
-};
 
 const app = new Hono<{ Bindings: Bindings }>();
 
 app.use("*", async (context, next) => {
-  const globalRef = globalThis as GlobalWithXMentionsConfig;
-  globalRef.__FEEDOONG_X_BEARER_TOKEN = context.env.X_BEARER_TOKEN;
-  globalRef.__FEEDOONG_X_API_BASE_URL = context.env.X_API_BASE_URL;
-  globalRef.__FEEDOONG_X_MENTIONS_MAX_RESULTS = context.env.X_MENTIONS_MAX_RESULTS;
-
   const originConfig = context.env.WEB_ORIGIN ?? "*";
   const allowedOrigins = originConfig === "*"
     ? "*"
@@ -300,9 +285,10 @@ app.get("/v1/sources", async (context) => {
 app.post("/v1/sources", async (context) => {
   const body = sourceBodySchema.parse(await readJsonBody(context.req.raw));
   const storage = await readStorage(context.env);
+  const parseFeedPort = createParseFeedPort(context.env);
 
   try {
-    const parsed = await parseFeed(body.url);
+    const parsed = await parseFeedPort(body.url);
     const source = addSource(storage, parsed.feedUrl, parsed.title);
     await writeStorage(context.env, storage);
     return context.json({ source }, 201);
@@ -331,9 +317,10 @@ app.get("/v1/items", async (context) => {
 app.post("/v1/sync", async (context) => {
   const body = syncBodySchema.parse(await readJsonBody(context.req.raw));
   const storage = await readStorage(context.env);
+  const parseFeedPort = createParseFeedPort(context.env);
 
   if (body.sourceId) {
-    const detail = await syncOneSource(storage, body.sourceId);
+    const detail = await syncOneSource(storage, body.sourceId, parseFeedPort);
     await writeStorage(context.env, storage);
     return context.json({
       syncedSources: 1,
@@ -343,7 +330,7 @@ app.post("/v1/sync", async (context) => {
     });
   }
 
-  const result = await syncAllSources(storage);
+  const result = await syncAllSources(storage, parseFeedPort);
   await writeStorage(context.env, storage);
   return context.json(result);
 });
@@ -358,7 +345,7 @@ app.post("/internal/sync", async (context) => {
   }
 
   const storage = await readStorage(context.env);
-  const result = await syncAllSources(storage);
+  const result = await syncAllSources(storage, createParseFeedPort(context.env));
   await writeStorage(context.env, storage);
   return context.json(result);
 });
