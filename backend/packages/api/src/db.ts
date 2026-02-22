@@ -6,6 +6,9 @@ export type SourceRow = {
   url: string;
   title: string;
   lastSyncedAt: string | null;
+  lastCheckedAt?: string | null;
+  lastHeadEtag?: string | null;
+  lastHeadLastModified?: string | null;
   createdAt: string;
 };
 
@@ -85,6 +88,9 @@ export class FeedoongDb {
       url,
       title,
       lastSyncedAt: null,
+      lastCheckedAt: null,
+      lastHeadEtag: null,
+      lastHeadLastModified: null,
       createdAt: new Date().toISOString()
     };
 
@@ -94,17 +100,40 @@ export class FeedoongDb {
     return source;
   }
 
-  updateSourceMetadata(sourceId: number, title: string, syncedAt: string) {
+  updateSourceMetadata(
+    sourceId: number,
+    title: string,
+    syncedAt: string,
+    checkMetadata?: {
+      checkedAt?: string | null;
+      headEtag?: string | null;
+      headLastModified?: string | null;
+    }
+  ) {
     const data = this.read();
     data.sources = data.sources.map((source) => {
       if (source.id !== sourceId) {
         return source;
       }
-      return {
+      const next: SourceRow = {
         ...source,
         title,
         lastSyncedAt: syncedAt
       };
+
+      if (checkMetadata) {
+        if ("checkedAt" in checkMetadata) {
+          next.lastCheckedAt = checkMetadata.checkedAt ?? null;
+        }
+        if ("headEtag" in checkMetadata) {
+          next.lastHeadEtag = checkMetadata.headEtag ?? null;
+        }
+        if ("headLastModified" in checkMetadata) {
+          next.lastHeadLastModified = checkMetadata.headLastModified ?? null;
+        }
+      }
+
+      return next;
     });
 
     data.items = data.items.map((item) => {
@@ -114,6 +143,28 @@ export class FeedoongDb {
       return {
         ...item,
         sourceTitle: title
+      };
+    });
+
+    this.write(data);
+  }
+
+  updateSourceCheckMetadata(
+    sourceId: number,
+    checkedAt: string,
+    headEtag: string | null,
+    headLastModified: string | null
+  ) {
+    const data = this.read();
+    data.sources = data.sources.map((source) => {
+      if (source.id !== sourceId) {
+        return source;
+      }
+      return {
+        ...source,
+        lastCheckedAt: checkedAt,
+        lastHeadEtag: headEtag,
+        lastHeadLastModified: headLastModified
       };
     });
 

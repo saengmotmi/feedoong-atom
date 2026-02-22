@@ -5,11 +5,13 @@ import { mediumStrategy } from "./strategies/medium.js";
 import { naverBlogStrategy } from "./strategies/naver-blog.js";
 import { tistoryStrategy } from "./strategies/tistory.js";
 import { velogStrategy } from "./strategies/velog.js";
+import { xMentionsStrategy } from "./strategies/x-mentions.js";
 import { youtubeStrategy } from "./strategies/youtube.js";
 import type { DiscoveryResult, FeedDiscoveryStrategy } from "./types.js";
 import { uniqueUrls } from "./utils.js";
 
 const DOMAIN_STRATEGIES: FeedDiscoveryStrategy[] = [
+  xMentionsStrategy,
   velogStrategy,
   naverBlogStrategy,
   brunchStrategy,
@@ -30,10 +32,15 @@ export const discoverFeedCandidates = async (rawUrl: string): Promise<DiscoveryR
     };
   }
 
-  const [domainCandidates, fallbackCandidates] = await Promise.all([
-    strategy.getCandidates(inputUrl),
-    defaultStrategy.getCandidates(inputUrl)
-  ]);
+  const domainCandidates = await strategy.getCandidates(inputUrl);
+  if (strategy.includeDefaultFallback === false) {
+    return {
+      strategyName: strategy.name,
+      candidates: uniqueUrls(domainCandidates)
+    };
+  }
+
+  const fallbackCandidates = await defaultStrategy.getCandidates(inputUrl);
 
   return {
     strategyName: strategy.name,

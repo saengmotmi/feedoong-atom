@@ -2,6 +2,7 @@ import Parser from "rss-parser";
 import { z } from "zod";
 
 import { discoverFeedCandidates } from "./discovery/index.js";
+import { parseXMentionsFeed } from "./providers/x-mentions.js";
 
 export const rssUrlSchema = z.string().url();
 
@@ -25,6 +26,14 @@ const parser = new Parser();
 
 const toSafeGuid = (link: string, title: string) => `${link}::${title}`;
 
+const isXMentionsCandidate = (candidateFeedUrl: string) => {
+  try {
+    return new URL(candidateFeedUrl).protocol === "x-mentions:";
+  } catch (_error) {
+    return false;
+  }
+};
+
 export const parseFeed = async (url: string): Promise<ParsedFeedResult> => {
   const inputUrl = rssUrlSchema.parse(url);
   const discovery = await discoverFeedCandidates(inputUrl);
@@ -32,6 +41,17 @@ export const parseFeed = async (url: string): Promise<ParsedFeedResult> => {
 
   for (const candidateFeedUrl of discovery.candidates) {
     try {
+      if (isXMentionsCandidate(candidateFeedUrl)) {
+        const parsed = await parseXMentionsFeed(candidateFeedUrl);
+        return {
+          title: parsed.title,
+          url: parsed.url,
+          feedUrl: parsed.feedUrl,
+          discoveryStrategy: discovery.strategyName,
+          items: parsed.items
+        };
+      }
+
       const parsed = await parser.parseURL(candidateFeedUrl);
 
       return {

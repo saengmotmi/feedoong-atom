@@ -12,6 +12,11 @@ const DEFAULT_CSV_PATH = path.join(
 
 const API_BASE_URL = process.env.API_BASE_URL ?? "http://localhost:4000";
 const MAX_CONCURRENCY = Number(process.env.IMPORT_CONCURRENCY ?? "4");
+const REQUEST_TIMEOUT_MS = Number(process.env.IMPORT_REQUEST_TIMEOUT_MS ?? "12000");
+const RETRY_ATTEMPTS = Number(process.env.IMPORT_RETRY_ATTEMPTS ?? "2");
+const RETRY_CONCURRENCY = Number(process.env.IMPORT_RETRY_CONCURRENCY ?? "1");
+const RETRY_DELAY_MS = Number(process.env.IMPORT_RETRY_DELAY_MS ?? "1500");
+const RETRY_MAX_DELAY_MS = Number(process.env.IMPORT_RETRY_MAX_DELAY_MS ?? "8000");
 
 const csvPathArg = process.argv[2];
 const csvPath = path.resolve(csvPathArg ?? DEFAULT_CSV_PATH);
@@ -101,9 +106,49 @@ const extractFirstUrl = (value) => {
   }
 };
 
+const sleep = (ms) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, Math.max(0, ms));
+  });
+
+const parseHttpStatus = (reason) => {
+  const match = reason.match(/^HTTP\s+(\d{3})\b/);
+  return match ? Number(match[1]) : null;
+};
+
+const isRetryableFailure = (reason) => {
+  if (!reason || reason.length === 0) {
+    return false;
+  }
+
+  if (reason.startsWith("NETWORK ")) {
+    return true;
+  }
+
+  const status = parseHttpStatus(reason);
+  if (status === 408 || status === 425 || status === 429) {
+    return true;
+  }
+  if (status && status >= 500 && status <= 599) {
+    return true;
+  }
+
+  if (
+    reason.includes("Worker exceeded resource limits") ||
+    reason.includes("Error 1102")
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
 const discoverFeedUrl = async (blogUrl) => {
   try {
-    const response = await fetch(blogUrl, { redirect: "follow" });
+    const response = await fetch(blogUrl, {
+      redirect: "follow",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+    });
     if (!response.ok) {
       return null;
     }
@@ -206,6 +251,7 @@ const postSource = async (rssUrl) => {
   try {
     const response = await fetch(`${API_BASE_URL}/v1/sources`, {
       method: "POST",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: {
         "content-type": "application/json"
       },
@@ -301,9 +347,80 @@ const importCandidate = async (candidate) => {
   };
 };
 
+const retryFailedCandidates = async (failedResults) => {
+  const maxAttempts = Math.max(0, RETRY_ATTEMPTS);
+  const retryableSeed = failedResults.filter((entry) =>
+    isRetryableFailure(entry.reason)
+  );
+
+  if (maxAttempts === 0 || retryableSeed.length === 0) {
+    return {
+      retriedCount: 0,
+      retryableCount: retryableSeed.length,
+      recoveredCount: 0,
+      finalResults: []
+    };
+  }
+
+  const retryableUrls = new Set(retryableSeed.map((entry) => entry.rssUrl));
+  const latestByUrl = new Map();
+  let queue = [...retryableSeed];
+  let retriedCount = 0;
+
+  for (let attempt = 1; attempt <= maxAttempts && queue.length > 0; attempt += 1) {
+    console.log(
+      `[retry] attempt ${attempt}/${maxAttempts} pending: ${queue.length}`
+    );
+
+    const delayMs = Math.min(RETRY_MAX_DELAY_MS, RETRY_DELAY_MS * 2 ** (attempt - 1));
+    const current = queue;
+    queue = [];
+
+    const retried = await runWithConcurrency(
+      current,
+      async (entry) => {
+        const jitter = Math.floor(Math.random() * 250);
+        await sleep(delayMs + jitter);
+        return importCandidate(entry);
+      },
+      RETRY_CONCURRENCY
+    );
+
+    retriedCount += retried.length;
+
+    let succeeded = 0;
+    for (const entry of retried) {
+      latestByUrl.set(entry.rssUrl, entry);
+      if (entry.status === "failed") {
+        if (isRetryableFailure(entry.reason) && attempt < maxAttempts) {
+          queue.push(entry);
+        }
+      } else {
+        succeeded += 1;
+      }
+    }
+
+    console.log(
+      `[retry] attempt ${attempt} succeeded: ${succeeded}, failed: ${retried.length - succeeded}`
+    );
+  }
+
+  const finalResults = Array.from(latestByUrl.values());
+  const recoveredCount = finalResults.filter((entry) => entry.status !== "failed").length;
+
+  return {
+    retriedCount,
+    retryableCount: retryableUrls.size,
+    recoveredCount,
+    finalResults
+  };
+};
+
 const ensureApiReady = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/health`);
+    const response = await fetch(`${API_BASE_URL}/health`, {
+      signal: AbortSignal.timeout(Math.min(5000, REQUEST_TIMEOUT_MS))
+    });
     return response.ok;
   } catch (_error) {
     return false;
@@ -329,11 +446,20 @@ const main = async () => {
   const { candidates, stats } = toCandidates(rows);
 
   const startedAt = Date.now();
-  const results = await runWithConcurrency(
+  const initialResults = await runWithConcurrency(
     candidates,
     async (candidate) => importCandidate(candidate),
     MAX_CONCURRENCY
   );
+  const initialFailed = initialResults.filter((value) => value.status === "failed");
+  const retryResult = await retryFailedCandidates(initialFailed);
+  const resultByRssUrl = new Map(
+    initialResults.map((entry) => [entry.rssUrl, entry])
+  );
+  retryResult.finalResults.forEach((entry) => {
+    resultByRssUrl.set(entry.rssUrl, entry);
+  });
+  const results = Array.from(resultByRssUrl.values());
   const elapsedMs = Date.now() - startedAt;
 
   const added = results.filter((value) => value.status === "added");
@@ -351,6 +477,9 @@ const main = async () => {
   console.log(`[import] duplicate in db: ${duplicate.length}`);
   console.log(`[import] failed: ${failed.length}`);
   console.log(`[import] recovered by blog fallback: ${fallbackRecovered.length}`);
+  console.log(`[import] retryable failed candidates: ${retryResult.retryableCount}`);
+  console.log(`[import] retried requests: ${retryResult.retriedCount}`);
+  console.log(`[import] recovered by retry: ${retryResult.recoveredCount}`);
   console.log(`[import] elapsed: ${elapsedMs}ms`);
 
   if (failed.length > 0) {

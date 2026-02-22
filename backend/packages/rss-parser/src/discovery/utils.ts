@@ -12,7 +12,11 @@ const FEED_HINT_PATTERN = /(feed|rss|atom|xml)/i;
 export const isHttpUrl = (value: string) => {
   try {
     const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
+    return (
+      url.protocol === "http:" ||
+      url.protocol === "https:" ||
+      url.protocol === "x-mentions:"
+    );
   } catch (_error) {
     return false;
   }
