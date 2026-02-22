@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "neverthrow": "^8.2.0",
+    "remeda": "^2.30.0",
     "rss-parser": "3.13.0",
+    "ts-pattern": "^5.8.0",
     "zod": "3.23.8"
   },
   "devDependencies": {

@@ -9,6 +9,17 @@ Cloudflare Workers 기반 API 런타임입니다.
 - 저장소 어댑터 (Cloudflare KV)
 - RSS 파서 옵션(X Mentions 토큰 등) 런타임 주입
 
+## 내부 모듈 구조 (v0.2)
+
+- `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/api-worker/src/index.ts`
+  - HTTP 라우팅 조합, 요청/응답 경계만 담당
+- `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/api-worker/src/storage.ts`
+  - KV 직렬화 + storage 상태 변환(reducer 스타일)
+- `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/api-worker/src/sync-usecase.ts`
+  - sync command 파싱/실행 + `@feedoong/sync-core` 어댑터
+- `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/api-worker/src/types.ts`
+  - 런타임/스토리지 타입 정의
+
 ## 개발
 
 레포 루트에서:

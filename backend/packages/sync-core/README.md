@@ -10,6 +10,21 @@
 - HEAD 요청 기반 변경 여부 판단
 - 변경 없으면 `status: "skipped"` 반환
 
+## 내부 모듈 구조 (v0.2)
+
+- `/Users/ohjongtaek/Desktop/dev/feedoong-atom/backend/packages/sync-core/src/head-check.ts`
+  - HEAD 판정 룰(`ts-pattern`) + validator 갱신
+- `/Users/ohjongtaek/Desktop/dev/feedoong-atom/backend/packages/sync-core/src/sync-one.ts`
+  - 단일 소스 동기화 오케스트레이션(`neverthrow`)
+- `/Users/ohjongtaek/Desktop/dev/feedoong-atom/backend/packages/sync-core/src/sync-all.ts`
+  - 배치 동기화 집계(`remeda`)
+- `/Users/ohjongtaek/Desktop/dev/feedoong-atom/backend/packages/sync-core/src/detail.ts`
+  - SyncDetail 생성/아이템 정규화
+- `/Users/ohjongtaek/Desktop/dev/feedoong-atom/backend/packages/sync-core/src/runtime.ts`
+  - 런타임 포트(fetch/clock) 공통 유틸
+- `/Users/ohjongtaek/Desktop/dev/feedoong-atom/backend/packages/sync-core/src/index.ts`
+  - public API re-export
+
 ## 의존성 주입 포트
 
 - `SyncRepository`

@@ -9,6 +9,19 @@ React Router v7 Framework + RSC + Vite 기반 웹 앱입니다.
 - API 서비스 호출(`API_BASE_URL` 또는 `API_SERVICE` binding)
 - Cloudflare 캐시 헤더(`Cache-Control`, `Cache-Tag`) 적용
 
+## 내부 모듈 구조 (v0.2)
+
+- `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/web/app/routes/home.tsx`
+  - route wiring + UI 렌더링
+- `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/web/app/routes/home.api.ts`
+  - 런타임 해석/API fetch/cache 정책
+- `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/web/app/routes/home.actions.ts`
+  - form intent 파싱 + command handler registry
+- `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/web/app/routes/home.presenter.ts`
+  - 상태/텍스트 표시 로직
+- `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/web/app/routes/home.types.ts`
+  - route 경계 타입
+
 ## 개발
 
 레포 루트에서:

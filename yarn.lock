@@ -759,6 +759,8 @@ __metadata:
     "@feedoong/sync-core": "npm:0.1.0"
     "@types/node": "npm:^22.19.11"
     hono: "npm:^4.12.1"
+    remeda: "npm:^2.30.0"
+    ts-pattern: "npm:^5.8.0"
     typescript: "npm:5.9.2"
     wrangler: "npm:^4.67.0"
     zod: "npm:3.23.8"
@@ -797,7 +799,10 @@ __metadata:
   resolution: "@feedoong/rss-parser@workspace:backend/packages/rss-parser"
   dependencies:
     "@types/node": "npm:20.16.11"
+    neverthrow: "npm:^8.2.0"
+    remeda: "npm:^2.30.0"
     rss-parser: "npm:3.13.0"
+    ts-pattern: "npm:^5.8.0"
     typescript: "npm:5.6.3"
     zod: "npm:3.23.8"
   languageName: unknown
@@ -821,6 +826,9 @@ __metadata:
   resolution: "@feedoong/sync-core@workspace:backend/packages/sync-core"
   dependencies:
     "@types/node": "npm:20.16.11"
+    neverthrow: "npm:^8.2.0"
+    remeda: "npm:^2.30.0"
+    ts-pattern: "npm:^5.8.0"
     typescript: "npm:5.6.3"
   languageName: unknown
   linkType: soft
@@ -838,6 +846,8 @@ __metadata:
     react: "npm:^19.1.1"
     react-dom: "npm:^19.1.1"
     react-router: "npm:^7.10.0"
+    remeda: "npm:^2.30.0"
+    ts-pattern: "npm:^5.8.0"
     typescript: "npm:^5.9.2"
     vite: "npm:^7.1.7"
     vite-tsconfig-paths: "npm:^5.1.4"
@@ -1444,6 +1454,13 @@ __metadata:
 "@rollup/rollup-linux-x64-gnu@npm:4.58.0":
   version: 4.58.0
   resolution: "@rollup/rollup-linux-x64-gnu@npm:4.58.0"
+  conditions: os=linux & cpu=x64 & libc=glibc
+  languageName: node
+  linkType: hard
+
+"@rollup/rollup-linux-x64-gnu@npm:^4.24.0":
+  version: 4.59.0
+  resolution: "@rollup/rollup-linux-x64-gnu@npm:4.59.0"
   conditions: os=linux & cpu=x64 & libc=glibc
   languageName: node
   linkType: hard
@@ -2946,6 +2963,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"neverthrow@npm:^8.2.0":
+  version: 8.2.0
+  resolution: "neverthrow@npm:8.2.0"
+  dependencies:
+    "@rollup/rollup-linux-x64-gnu": "npm:^4.24.0"
+  dependenciesMeta:
+    "@rollup/rollup-linux-x64-gnu":
+      optional: true
+  checksum: 10c0/7058a31bcc4b608021dbc217287105c133480265eca742ec11b0211ff81bdf1bb16098687bf16b20d0212578ccaf47f7df8733cea10f10c315bd4538b4cc1f04
+  languageName: node
+  linkType: hard
+
 "node-cron@npm:3.0.3":
   version: 3.0.3
   resolution: "node-cron@npm:3.0.3"
@@ -3233,6 +3262,13 @@ __metadata:
   version: 4.1.2
   resolution: "readdirp@npm:4.1.2"
   checksum: 10c0/60a14f7619dec48c9c850255cd523e2717001b0e179dc7037cfa0895da7b9e9ab07532d324bfb118d73a710887d1e35f79c495fa91582784493e085d18c72c62
+  languageName: node
+  linkType: hard
+
+"remeda@npm:^2.30.0":
+  version: 2.33.6
+  resolution: "remeda@npm:2.33.6"
+  checksum: 10c0/b85d9e041e03153c5f6a3c8eec36c843e4a3dd6aebfbe1528d353654befc53b9fac18c399e8e36b8571acd54e836cd31ef7bd8240980b3134488e6ccff84c31b
   languageName: node
   linkType: hard
 
@@ -3702,6 +3738,13 @@ __metadata:
   version: 1.0.1
   resolution: "toidentifier@npm:1.0.1"
   checksum: 10c0/93937279934bd66cc3270016dd8d0afec14fb7c94a05c72dc57321f8bd1fa97e5bea6d1f7c89e728d077ca31ea125b78320a616a6c6cd0e6b9cb94cb864381c1
+  languageName: node
+  linkType: hard
+
+"ts-pattern@npm:^5.8.0":
+  version: 5.9.0
+  resolution: "ts-pattern@npm:5.9.0"
+  checksum: 10c0/7640db25c39d29b287471b2b82d4f7b4674a02098c6ba4d10fed180adfb07d0e0c71930d9e59dc0d90654145e02fd320af63cf0df3c41e100d4154658a612a0a
   languageName: node
   linkType: hard
 

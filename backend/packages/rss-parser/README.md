@@ -10,6 +10,12 @@
 - RSS/Atom 결과 normalize
 - X Mentions 같은 provider 전략 지원
 
+## 파싱 파이프라인 원칙 (v0.2)
+
+- provider 선택은 프로토콜 매칭(`ts-pattern`)으로 처리
+- 후보 URL 시도는 Result 체인(`neverthrow`)으로 누적
+- normalize 단계는 컬렉션 조합(`remeda`)으로 표현
+
 ## 주요 API
 
 - `parseFeed(url, options?)`

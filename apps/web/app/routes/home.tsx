@@ -1,137 +1,10 @@
-import { data, redirect } from "react-router";
+import { data } from "react-router";
 
+import { buildCacheControl, loadDashboardPayload, resolveApiRuntime } from "./home.api";
+import { parseActionIntent, runActionIntent } from "./home.actions";
+import { formatPublishedLabel, getHostLabel, parseStatusLabel, toSummary } from "./home.presenter";
 import type { Route } from "./+types/home";
-
-type Source = {
-  id: number;
-  url: string;
-  title: string;
-  lastSyncedAt: string | null;
-  createdAt: string;
-};
-
-type FeedItem = {
-  id: number;
-  sourceId: number;
-  sourceTitle: string;
-  title: string;
-  link: string;
-  summary: string | null;
-  publishedAt: string | null;
-  createdAt: string;
-};
-
-type ApiServiceBinding = {
-  fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-};
-
-type RouteContextWithApiService = {
-  apiService?: ApiServiceBinding;
-};
-
-type GlobalWithApiService = typeof globalThis & {
-  __FEEDOONG_API_SERVICE?: ApiServiceBinding;
-};
-
-const DEFAULT_CACHE_TTL_SECONDS = 60;
-const DEFAULT_STALE_SECONDS = 300;
-const SERVICE_BINDING_BASE_URL = "http://api.internal";
-
-const buildCacheControl = (ttlSeconds: number) =>
-  `public, max-age=0, s-maxage=${ttlSeconds}, stale-while-revalidate=${DEFAULT_STALE_SECONDS}`;
-
-const makeApiUrl = (baseUrl: string, path: string) => `${baseUrl}${path}`;
-
-const fetchJson = async <T,>(
-  url: string,
-  init?: RequestInit,
-  cacheTtlSeconds?: number,
-  fetchImpl: typeof fetch = fetch
-): Promise<T> => {
-  const requestInit: RequestInit & { cf?: Record<string, unknown> } = {
-    ...init
-  };
-
-  if (cacheTtlSeconds && (!init?.method || init.method === "GET")) {
-    requestInit.cf = {
-      cacheEverything: true,
-      cacheTtl: cacheTtlSeconds
-    };
-  }
-
-  const response = await fetchImpl(url, requestInit);
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `API request failed (${response.status})`);
-  }
-
-  return response.json() as Promise<T>;
-};
-
-const getApiServiceBinding = (context: unknown): ApiServiceBinding | null => {
-  const globalApiService =
-    (globalThis as GlobalWithApiService).__FEEDOONG_API_SERVICE ?? null;
-  if (globalApiService) {
-    return globalApiService;
-  }
-
-  const routeContext = context as RouteContextWithApiService;
-  return routeContext.apiService ?? null;
-};
-
-const parseStatusLabel = (status: string | null) => {
-  switch (status) {
-    case "source-added":
-      return "RSS 소스를 등록했습니다.";
-    case "synced":
-      return "동기화를 완료했습니다.";
-    case "source-error":
-      return "RSS 등록에 실패했습니다.";
-    case "sync-error":
-      return "동기화에 실패했습니다.";
-    default:
-      return null;
-  }
-};
-
-const stripHtml = (value: string) => value.replace(/<[^>]*>/g, " ");
-
-const toSummary = (value: string | null) => {
-  if (!value) {
-    return "요약이 아직 없습니다.";
-  }
-
-  const text = stripHtml(value).replace(/\s+/g, " ").trim();
-  if (!text) {
-    return "요약이 아직 없습니다.";
-  }
-
-  if (text.length <= 140) {
-    return text;
-  }
-
-  return `${text.slice(0, 140)}…`;
-};
-
-const formatPublishedLabel = (publishedAt: string | null) => {
-  if (!publishedAt) {
-    return "발행일 없음";
-  }
-
-  return new Date(publishedAt).toLocaleDateString("ko-KR", {
-    month: "2-digit",
-    day: "2-digit"
-  });
-};
-
-const getHostLabel = (url: string) => {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch (_error) {
-    return "원문";
-  }
-};
+import type { FeedItem, Source } from "./home.types";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -141,44 +14,23 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const apiService = getApiServiceBinding(context);
-  const apiBaseUrl = apiService
-    ? SERVICE_BINDING_BASE_URL
-    : process.env.API_BASE_URL ?? "http://localhost:4000";
-  const apiFetch = apiService?.fetch.bind(apiService) ?? fetch;
-  const ttlSeconds = Number(
-    process.env.CACHE_TTL_SECONDS ?? DEFAULT_CACHE_TTL_SECONDS
-  );
-
+  const runtime = resolveApiRuntime(context);
   const requestUrl = new URL(request.url);
   const status = parseStatusLabel(requestUrl.searchParams.get("status"));
 
   try {
-    const [sourcesResult, itemsResult] = await Promise.all([
-      fetchJson<{ sources: Source[] }>(
-        makeApiUrl(apiBaseUrl, "/v1/sources"),
-        undefined,
-        ttlSeconds,
-        apiFetch
-      ),
-      fetchJson<{ items: FeedItem[] }>(
-        makeApiUrl(apiBaseUrl, "/v1/items?limit=100&offset=0"),
-        undefined,
-        ttlSeconds,
-        apiFetch
-      )
-    ]);
+    const dashboard = await loadDashboardPayload(runtime);
 
     return data(
       {
-        sources: sourcesResult.sources,
-        items: itemsResult.items,
+        sources: dashboard.sources,
+        items: dashboard.items,
         status,
         error: null
       },
       {
         headers: {
-          "Cache-Control": buildCacheControl(ttlSeconds),
+          "Cache-Control": buildCacheControl(runtime.ttlSeconds),
           "Cache-Tag": "feedoong,feedoong-dashboard"
         }
       }
@@ -205,49 +57,11 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
 export async function action({ request, context }: Route.ActionArgs) {
   const formData = await request.formData();
-  const intent = formData.get("intent");
-  const apiService = getApiServiceBinding(context);
-  const apiBaseUrl = apiService
-    ? SERVICE_BINDING_BASE_URL
-    : process.env.API_BASE_URL ?? "http://localhost:4000";
-  const apiFetch = apiService?.fetch.bind(apiService) ?? fetch;
-
-  if (intent === "add-source") {
-    const url = String(formData.get("url") ?? "").trim();
-    if (!url) {
-      return redirect("/?status=source-error");
-    }
-
-    try {
-      await fetchJson(makeApiUrl(apiBaseUrl, "/v1/sources"), {
-        method: "POST",
-        headers: {
-          "content-type": "application/json"
-        },
-        body: JSON.stringify({ url })
-      }, undefined, apiFetch);
-      return redirect("/?status=source-added");
-    } catch (_error) {
-      return redirect("/?status=source-error");
-    }
-  }
-
-  if (intent === "sync") {
-    try {
-      await fetchJson(makeApiUrl(apiBaseUrl, "/v1/sync"), {
-        method: "POST",
-        headers: {
-          "content-type": "application/json"
-        },
-        body: "{}"
-      }, undefined, apiFetch);
-      return redirect("/?status=synced");
-    } catch (_error) {
-      return redirect("/?status=sync-error");
-    }
-  }
-
-  return redirect("/");
+  const intent = parseActionIntent(formData.get("intent"));
+  return runActionIntent(intent, {
+    formData,
+    runtime: resolveApiRuntime(context)
+  });
 }
 
 export async function ServerComponent({ loaderData }: Route.ComponentProps) {

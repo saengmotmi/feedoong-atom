@@ -13,14 +13,18 @@
 
 ```text
 apps/
+  api-worker/          # Cloudflare Worker API 런타임(Hono + KV)
   web/                 # 개인용 웹 UI (피드 보기, 소스 추가/동기화)
   extension/           # 크롬 새 탭 -> web 리다이렉트
 backend/packages/
   api/                 # REST API + JSON 파일 저장소
+  contracts/           # API 계약/스키마
   scheduler/           # 주기 동기화 트리거
   rss-parser/          # RSS 파싱/정규화 공통 패키지
+  sync-core/           # 런타임 비종속 동기화 도메인
 docs/
   PRD.md
+  PRD_DECLARATIVE_COMPOSITION.md
 infra/
   docker-compose.yml
 ```
@@ -110,6 +114,20 @@ Cloudflare 타입 생성(선택):
 ```bash
 yarn workspace @feedoong/web cf-typegen
 ```
+
+## Declarative Refactor (v0.2)
+
+2026-02-22 기준으로 선언적 함수 조합 리팩토링을 적용했습니다.
+
+- 핵심 문서: `docs/PRD_DECLARATIVE_COMPOSITION.md`
+- 적용 대상:
+  - `backend/packages/sync-core/src/*` (HEAD 판정/단일 동기화/배치 집계 분리)
+  - `apps/api-worker/src/*` (storage/sync-usecase/http 조합 분리)
+  - `apps/web/app/routes/home*.ts*` (runtime/api/intents/presenter 분리)
+- 강제 가드:
+  - `yarn check:architecture`
+  - 엔트리 파일 라인 수 220 이하 체크 포함
+  - `sync-core`의 `remeda`/`ts-pattern`/`neverthrow` 사용 체크 포함
 
 ## MVP API
 
