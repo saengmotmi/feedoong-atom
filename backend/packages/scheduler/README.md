@@ -25,6 +25,7 @@ yarn workspace @feedoong/scheduler start
 ```bash
 yarn workspace @feedoong/scheduler build
 yarn workspace @feedoong/scheduler typecheck
+yarn workspace @feedoong/scheduler test
 ```
 
 ## 환경변수

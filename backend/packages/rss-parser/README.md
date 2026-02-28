@@ -37,6 +37,7 @@
 yarn workspace @feedoong/rss-parser dev
 yarn workspace @feedoong/rss-parser build
 yarn workspace @feedoong/rss-parser typecheck
+yarn workspace @feedoong/rss-parser test
 ```
 
 ## 전략 추가 위치

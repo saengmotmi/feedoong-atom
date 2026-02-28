@@ -789,6 +789,7 @@ __metadata:
   resolution: "@feedoong/contracts@workspace:backend/packages/contracts"
   dependencies:
     "@types/node": "npm:20.16.11"
+    tsx: "npm:4.19.1"
     typescript: "npm:5.6.3"
     zod: "npm:3.23.8"
   languageName: unknown
@@ -804,6 +805,7 @@ __metadata:
     remeda: "npm:^2.30.0"
     rss-parser: "npm:3.13.0"
     ts-pattern: "npm:^5.8.0"
+    tsx: "npm:4.19.1"
     typescript: "npm:5.6.3"
     zod: "npm:3.23.8"
   languageName: unknown

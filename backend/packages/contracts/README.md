@@ -36,6 +36,7 @@ const body = sourceBodySchema.parse(await readJsonBody(request));
 ```bash
 yarn workspace @feedoong/contracts build
 yarn workspace @feedoong/contracts typecheck
+yarn workspace @feedoong/contracts test
 ```
 
 ## 원칙
