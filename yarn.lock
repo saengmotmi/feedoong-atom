@@ -853,10 +853,12 @@ __metadata:
     react-router: "npm:^7.10.0"
     remeda: "npm:^2.30.0"
     ts-pattern: "npm:^5.8.0"
+    tsx: "npm:4.19.1"
     typescript: "npm:^5.9.2"
     vite: "npm:^7.1.7"
     vite-tsconfig-paths: "npm:^5.1.4"
     wrangler: "npm:^4.67.0"
+    zod: "npm:3.23.8"
   languageName: unknown
   linkType: soft
 

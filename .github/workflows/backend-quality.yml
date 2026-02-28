@@ -33,6 +33,9 @@ jobs:
       - name: API Worker Runtime Smoke (Wrangler Local)
         run: corepack yarn smoke:worker-runtime
 
+      - name: Web Regression Tests
+        run: corepack yarn test:web
+
       - name: Backend Regression Tests
         run: corepack yarn test:backend
 

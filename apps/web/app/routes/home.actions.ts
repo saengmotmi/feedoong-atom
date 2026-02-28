@@ -1,7 +1,7 @@
 import { redirect } from "react-router";
 import { match } from "ts-pattern";
 
-import { requestAddSource, requestSync } from "./home.api";
+import { ApiRequestError, requestAddSource, requestSync } from "./home.api";
 import type { ActionIntent, IntentHandlerArgs } from "./home.types";
 
 export const parseActionIntent = (rawIntent: FormDataEntryValue | null): ActionIntent | null =>
@@ -12,6 +12,24 @@ export const parseActionIntent = (rawIntent: FormDataEntryValue | null): ActionI
 
 const redirectWithStatus = (status: string) => redirect(`/?status=${status}`);
 
+const toFailureStatus = (
+  error: unknown,
+  defaultStatus: string
+) => {
+  if (error instanceof ApiRequestError) {
+    if (error.status === 401 || error.status === 503) {
+      return "config-error";
+    }
+    if (error.status === 409) {
+      return "source-duplicate";
+    }
+    if (error.status === 422) {
+      return "source-invalid";
+    }
+  }
+  return defaultStatus;
+};
+
 const runActionWithRedirect = async (
   action: () => Promise<unknown>,
   successStatus: string,
@@ -20,8 +38,8 @@ const runActionWithRedirect = async (
   try {
     await action();
     return redirectWithStatus(successStatus);
-  } catch (_error) {
-    return redirectWithStatus(failStatus);
+  } catch (error) {
+    return redirectWithStatus(toFailureStatus(error, failStatus));
   }
 };
 

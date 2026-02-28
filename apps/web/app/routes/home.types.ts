@@ -33,6 +33,7 @@ export type ApiRuntime = {
   apiBaseUrl: string;
   apiFetch: typeof fetch;
   ttlSeconds: number;
+  apiTimeoutMs: number;
   apiWriteKey: string;
 };
 

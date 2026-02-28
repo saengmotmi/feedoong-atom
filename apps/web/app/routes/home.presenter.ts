@@ -6,7 +6,10 @@ export const parseStatusLabel = (status: string | null) =>
     .with("source-added", () => "RSS 소스를 등록했습니다.")
     .with("synced", () => "동기화를 완료했습니다.")
     .with("source-error", () => "RSS 등록에 실패했습니다.")
+    .with("source-duplicate", () => "이미 등록된 RSS 소스입니다.")
+    .with("source-invalid", () => "공개된 RSS URL만 등록할 수 있습니다.")
     .with("sync-error", () => "동기화에 실패했습니다.")
+    .with("config-error", () => "서버 설정을 확인한 뒤 다시 시도해 주세요.")
     .otherwise(() => null);
 
 const stripHtml = (value: string) => value.replace(/<[^>]*>/g, " ");

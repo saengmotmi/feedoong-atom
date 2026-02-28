@@ -17,6 +17,7 @@
     "smoke:remote": "bash ./scripts/smoke-remote-api.sh",
     "check:slo": "node ./scripts/check-slo.mjs",
     "backup:d1": "bash ./scripts/d1-backup.sh",
+    "test:web": "yarn workspace @feedoong/web test",
     "check:architecture": "./scripts/check-architecture.sh",
     "import:subscriptions": "node ./scripts/import-subscriptions.mjs",
     "test:backend": "yarn workspace @feedoong/contracts test && yarn workspace @feedoong/rss-parser test && yarn workspace @feedoong/sync-core test && yarn workspace @feedoong/api-worker test && yarn workspace @feedoong/api test && yarn workspace @feedoong/scheduler test",

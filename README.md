@@ -156,6 +156,7 @@ yarn workspace @feedoong/web cf-typegen
 - D1 백업(일 1회): `/Users/ohjongtaek/Desktop/dev/feedoong-atom/.github/workflows/d1-backup.yml`
   - 필요 설정: `D1_DATABASE_NAME`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`
   - 산출물: SQL export 아티팩트(보존 14일)
+- 설정값 주입 TODO: `/Users/ohjongtaek/Desktop/dev/feedoong-atom/docs/TODO.md`
 
 ## Notes
 

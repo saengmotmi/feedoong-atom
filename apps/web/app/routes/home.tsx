@@ -1,4 +1,4 @@
-import { data } from "react-router";
+import { data, redirect } from "react-router";
 
 import {
   buildCacheControl,
@@ -19,11 +19,11 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const runtime = resolveApiRuntime(context);
   const requestUrl = new URL(request.url);
   const status = parseStatusLabel(requestUrl.searchParams.get("status"));
 
   try {
+    const runtime = resolveApiRuntime(context);
     const dashboard = await loadDashboardPayload(runtime);
 
     return data(
@@ -62,10 +62,14 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 export async function action({ request, context }: Route.ActionArgs) {
   const formData = await request.formData();
   const intent = parseActionIntent(formData.get("intent"));
-  return runActionIntent(intent, {
-    formData,
-    runtime: resolveApiRuntime(context)
-  });
+  try {
+    return runActionIntent(intent, {
+      formData,
+      runtime: resolveApiRuntime(context)
+    });
+  } catch (_error) {
+    return redirect("/?status=config-error");
+  }
 }
 
 export async function ServerComponent({ loaderData }: Route.ComponentProps) {

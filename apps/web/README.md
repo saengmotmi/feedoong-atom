@@ -8,6 +8,7 @@ React Router v7 Framework + RSC + Vite 기반 웹 앱입니다.
 - RSC 페이지 렌더링
 - API 서비스 호출(`API_BASE_URL` 또는 `API_SERVICE` binding)
 - Cloudflare 캐시 헤더(`Cache-Control`, `Cache-Tag`) 적용
+- API 응답 스키마 검증 + 요청 타임아웃/재시도(GET)
 
 ## 내부 모듈 구조 (v0.2)
 
@@ -49,6 +50,7 @@ yarn workspace @feedoong/web deploy
 ```bash
 yarn workspace @feedoong/web cf-typegen
 yarn workspace @feedoong/web typecheck
+yarn workspace @feedoong/web test
 ```
 
 ## 환경설정
@@ -59,6 +61,7 @@ yarn workspace @feedoong/web typecheck
 - vars:
   - `API_BASE_URL`
   - `CACHE_TTL_SECONDS`
+  - `API_TIMEOUT_MS` (선택, 기본 `8000`)
   - `API_WRITE_KEY` (필수: 서버 액션에서 `x-api-key`로 전달)
 
 ## 주요 파일
