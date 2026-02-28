@@ -23,10 +23,8 @@ describe("scheduler regression", () => {
     });
   });
 
-  it("scheduler key가 비어 있으면 인증 헤더를 생략한다", () => {
-    assert.deepEqual(createSyncRequestHeaders("   "), {
-      "Content-Type": "application/json"
-    });
+  it("scheduler key가 비어 있으면 즉시 예외를 던진다", () => {
+    assert.throws(() => createSyncRequestHeaders("   "), /schedulerKey is required/);
   });
 
   it("retry delay는 지수 증가하고 상한을 넘지 않는다", () => {

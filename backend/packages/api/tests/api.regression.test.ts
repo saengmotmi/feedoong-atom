@@ -4,7 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, it } from "node:test";
 
-import { API_WRITE_KEY_HEADER, SCHEDULER_KEY_HEADER } from "@feedoong/contracts";
+import {
+  API_WRITE_KEY_HEADER,
+  API_ERROR_CODES,
+  SCHEDULER_KEY_HEADER,
+  ServerMisconfiguredError
+} from "@feedoong/contracts";
 
 import { createApiApp } from "../src/app.js";
 import { FeedoongDb } from "../src/db.js";
@@ -79,6 +84,23 @@ const createFixtureDrivenApp = () => {
 };
 
 describe("API regression fixtures", () => {
+  it("필수 인증 시크릿이 누락되면 앱 생성을 거부한다", () => {
+    assert.throws(
+      () =>
+        createApiApp({
+          webOrigin: "*",
+          apiWriteKey: "",
+          schedulerKey: "",
+          enforceSecretValidation: true
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof ServerMisconfiguredError);
+        assert.equal(error.code, API_ERROR_CODES.SERVER_MISCONFIGURED);
+        return true;
+      }
+    );
+  });
+
   it("쓰기 API는 x-api-key 없으면 401을 반환한다", async () => {
     const app = createFixtureDrivenApp();
     const response = await postJson(
@@ -148,6 +170,31 @@ describe("API regression fixtures", () => {
     };
     assertErrorPayload(body, "INVALID_REQUEST");
     assert.ok(Array.isArray(body.issues));
+  });
+
+  it("파서가 타임아웃되면 422 + SOURCE_REGISTRATION_FAILED로 마스킹된다", async () => {
+    const app = createApiApp({
+      db: new FeedoongDb(createTempDbPath()),
+      parseFeedPort: async () =>
+        new Promise<ParsedFeedResult>(() => undefined),
+      parseFeedTimeoutMs: 5,
+      webOrigin: "*",
+      apiWriteKey: "test-write-key",
+      schedulerKey: "test-scheduler-key"
+    });
+
+    const response = await postJson(
+      app,
+      "/v1/sources",
+      { url: "https://example.com/blog" },
+      {
+        [API_WRITE_KEY_HEADER]: "test-write-key"
+      }
+    );
+
+    assert.equal(response.status, 422);
+    const body = (await response.json()) as unknown;
+    assertErrorPayload(body, API_ERROR_CODES.SOURCE_REGISTRATION_FAILED);
   });
 
   it("fixture 기반으로 source 등록 후 단일 sync가 정상 동작한다", async () => {

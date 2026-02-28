@@ -34,7 +34,7 @@ yarn workspace @feedoong/scheduler test
 
 - `API_BASE_URL` (기본 `http://localhost:4000`)
 - `SYNC_CRON` (기본 `*/30 * * * *`)
-- `SCHEDULER_KEY` (선택)
+- `SCHEDULER_KEY` (필수)
 - `SYNC_REQUEST_TIMEOUT_MS` (기본 `15000`)
 - `SYNC_RETRY_ATTEMPTS` (기본 `2`, 총 시도 = 기본 3회)
 - `SYNC_RETRY_BASE_DELAY_MS` (기본 `1500`)

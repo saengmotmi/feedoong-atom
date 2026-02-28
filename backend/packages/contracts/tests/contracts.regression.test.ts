@@ -3,13 +3,15 @@ import { describe, it } from "node:test";
 
 import {
   API_ERROR_CODES,
+  ServerMisconfiguredError,
   UnauthorizedError,
   UrlNotAllowedError,
   assertPublicSourceUrl,
   createApiErrorResponse,
   ensureAuthorizedByKey,
   isPrivateOrLocalHost,
-  isPublicHttpUrl
+  isPublicHttpUrl,
+  requireConfiguredSecret
 } from "../src/index.js";
 
 describe("contracts regression", () => {
@@ -102,5 +104,21 @@ describe("contracts regression", () => {
       requestId: "req-1"
     });
     assert.equal("issues" in response, false);
+  });
+
+  it("requireConfiguredSecret은 빈 값이면 ServerMisconfiguredError를 던진다", () => {
+    assert.throws(
+      () =>
+        requireConfiguredSecret({
+          value: " ",
+          secretName: "API_WRITE_KEY"
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof ServerMisconfiguredError);
+        assert.equal(error.code, API_ERROR_CODES.SERVER_MISCONFIGURED);
+        assert.equal(error.status, 503);
+        return true;
+      }
+    );
   });
 });

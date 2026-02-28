@@ -6,7 +6,7 @@ Cloudflare Workers 기반 API 런타임입니다.
 ## 역할
 
 - Hono 라우팅 (`/health`, `/v1/sources`, `/v1/items`, `/v1/sync`, `/internal/sync`)
-- 저장소 어댑터 (Cloudflare KV)
+- 저장소 어댑터 (Cloudflare D1)
 - RSS 파서 옵션(X Mentions 토큰 등) 런타임 주입
 
 ## 내부 모듈 구조 (v0.2)
@@ -14,7 +14,7 @@ Cloudflare Workers 기반 API 런타임입니다.
 - `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/api-worker/src/index.ts`
   - HTTP 라우팅 조합, 요청/응답 경계만 담당
 - `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/api-worker/src/storage.ts`
-  - KV 직렬화 + storage 상태 변환(reducer 스타일)
+  - D1 스키마 보장 + repository 어댑터
 - `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/api-worker/src/sync-usecase.ts`
   - sync command 파싱/실행 + `@feedoong/sync-core` 어댑터
 - `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/api-worker/src/types.ts`
@@ -34,9 +34,17 @@ yarn workspace @feedoong/api-worker dev
 yarn workspace @feedoong/api-worker deploy
 ```
 
-## 타입 생성 / 타입체크
+## D1 마이그레이션
 
 ```bash
+yarn workspace @feedoong/api-worker wrangler d1 migrations apply feedoong-atom-db --local --config wrangler.jsonc
+yarn workspace @feedoong/api-worker wrangler d1 migrations apply feedoong-atom-db --remote --config wrangler.jsonc
+```
+
+## 테스트 / 타입 생성 / 타입체크
+
+```bash
+yarn workspace @feedoong/api-worker test
 yarn workspace @feedoong/api-worker cf-typegen
 yarn workspace @feedoong/api-worker typecheck
 ```
@@ -45,11 +53,12 @@ yarn workspace @feedoong/api-worker typecheck
 
 `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/api-worker/wrangler.jsonc` 기준:
 
-- KV binding: `FEEDOONG_DB`
+- D1 binding: `FEEDOONG_DB`
 - vars:
   - `WEB_ORIGIN`
-  - `API_WRITE_KEY` (선택: 설정 시 `POST /v1/sources`, `POST /v1/sync` 인증 강제)
-  - `SCHEDULER_KEY`
+  - `API_WRITE_KEY` (필수)
+  - `SCHEDULER_KEY` (필수)
+  - `PARSE_FEED_TIMEOUT_MS` (선택, 기본 `15000`)
   - `X_BEARER_TOKEN` (선택, x-mentions 전략용)
   - `X_API_BASE_URL` (선택, 기본 `https://api.x.com/2`)
   - `X_MENTIONS_MAX_RESULTS` (선택, 기본 100)

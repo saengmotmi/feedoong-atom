@@ -7,20 +7,21 @@
     "dev": "wrangler dev --config wrangler.jsonc",
     "deploy": "wrangler deploy --config wrangler.jsonc",
     "cf-typegen": "wrangler types --config wrangler.jsonc worker-configuration.d.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "tsx --test tests/**/*.test.ts"
   },
   "dependencies": {
     "@feedoong/contracts": "0.1.0",
     "@feedoong/rss-parser": "0.1.0",
     "@feedoong/sync-core": "0.1.0",
     "hono": "^4.12.1",
-    "remeda": "^2.30.0",
     "ts-pattern": "^5.8.0",
     "zod": "3.23.8"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260218.0",
     "@types/node": "^22.19.11",
+    "tsx": "4.19.1",
     "typescript": "5.9.2",
     "wrangler": "^4.67.0"
   }

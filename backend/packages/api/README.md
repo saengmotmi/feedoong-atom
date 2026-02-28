@@ -43,8 +43,9 @@ yarn workspace @feedoong/api test
 - `PORT` (기본 `4000`)
 - `WEB_ORIGIN`
 - `DB_PATH`
-- `API_WRITE_KEY` (선택: 설정 시 `POST /v1/sources`, `POST /v1/sync` 인증 강제)
-- `SCHEDULER_KEY`
+- `API_WRITE_KEY` (필수)
+- `SCHEDULER_KEY` (필수)
+- `PARSE_FEED_TIMEOUT_MS` (선택, 기본 `15000`)
 - `X_BEARER_TOKEN` (선택)
 - `X_API_BASE_URL` (선택)
 - `X_MENTIONS_MAX_RESULTS` (선택)
@@ -54,7 +55,7 @@ yarn workspace @feedoong/api test
 - 쓰기 요청(`POST /v1/sources`, `POST /v1/sync`): `x-api-key`
 - 내부 동기화(`POST /internal/sync`): `x-scheduler-key`
 
-키 환경변수가 비어 있으면 기존처럼 인증 없이 동작하고, 값이 설정되면 동일 값 헤더가 있어야 통과됩니다.
+`API_WRITE_KEY`, `SCHEDULER_KEY`가 비어 있으면 앱이 시작되지 않습니다.
 
 ## 의존 경계
 
