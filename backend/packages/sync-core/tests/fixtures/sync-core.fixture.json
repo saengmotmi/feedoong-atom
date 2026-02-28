@@ -1,0 +1,31 @@
+{
+  "source": {
+    "id": 1,
+    "url": "https://example.com/feed.xml",
+    "title": "Example Feed",
+    "lastSyncedAt": null,
+    "lastCheckedAt": "2026-02-20T00:00:00.000Z",
+    "lastHeadEtag": "etag-v1",
+    "lastHeadLastModified": "Fri, 20 Feb 2026 00:00:00 GMT",
+    "createdAt": "2026-02-19T00:00:00.000Z"
+  },
+  "parsed": {
+    "title": "Example Feed",
+    "items": [
+      {
+        "guid": "item-1",
+        "title": "Item 1",
+        "link": "https://example.com/items/1",
+        "summary": "summary-1",
+        "publishedAt": "2026-02-28T00:00:00.000Z"
+      },
+      {
+        "guid": "item-2",
+        "title": "Item 2",
+        "link": "https://example.com/items/2",
+        "summary": "summary-2",
+        "publishedAt": "2026-02-28T01:00:00.000Z"
+      }
+    ]
+  }
+}

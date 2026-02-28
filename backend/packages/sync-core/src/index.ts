@@ -16,3 +16,4 @@ export type {
 
 export { syncAllSources } from "./sync-all.js";
 export { syncOneSource } from "./sync-one.js";
+export { SourceNotFoundError } from "./errors.js";

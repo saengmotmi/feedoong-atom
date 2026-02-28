@@ -52,6 +52,7 @@ const result = await syncAllSources({
 ```bash
 yarn workspace @feedoong/sync-core build
 yarn workspace @feedoong/sync-core typecheck
+yarn workspace @feedoong/sync-core test
 ```
 
 ## 경계 원칙

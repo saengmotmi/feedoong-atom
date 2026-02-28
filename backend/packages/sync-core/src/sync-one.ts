@@ -2,6 +2,7 @@ import { ResultAsync } from "neverthrow";
 
 import { checkSourceByHead } from "./head-check.js";
 import { createOkDetail, createSkippedDetail, normalizeSyncItems } from "./detail.js";
+import { SourceNotFoundError } from "./errors.js";
 import { resolveNow, toErrorMessage } from "./runtime.js";
 import type { SourceRecord, SyncDetail, SyncOneSourceDeps } from "./types.js";
 
@@ -48,7 +49,7 @@ const runSyncFetchStage = (
 export const syncOneSource = async (deps: SyncOneSourceDeps): Promise<SyncDetail> => {
   const source = await deps.repository.getSourceById(deps.sourceId);
   if (!source) {
-    throw new Error(`Source not found: ${deps.sourceId}`);
+    throw new SourceNotFoundError(deps.sourceId);
   }
 
   const headCheck = await checkSourceByHead(source, deps);
