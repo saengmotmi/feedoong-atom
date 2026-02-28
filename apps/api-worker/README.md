@@ -48,10 +48,16 @@ yarn workspace @feedoong/api-worker typecheck
 - KV binding: `FEEDOONG_DB`
 - vars:
   - `WEB_ORIGIN`
+  - `API_WRITE_KEY` (선택: 설정 시 `POST /v1/sources`, `POST /v1/sync` 인증 강제)
   - `SCHEDULER_KEY`
   - `X_BEARER_TOKEN` (선택, x-mentions 전략용)
   - `X_API_BASE_URL` (선택, 기본 `https://api.x.com/2`)
   - `X_MENTIONS_MAX_RESULTS` (선택, 기본 100)
+
+## 인증 헤더
+
+- 쓰기 요청(`POST /v1/sources`, `POST /v1/sync`): `x-api-key`
+- 내부 동기화(`POST /internal/sync`): `x-scheduler-key`
 
 ## 의존 경계
 

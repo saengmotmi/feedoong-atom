@@ -8,6 +8,7 @@
 	],
 	"vars": {
 		"WEB_ORIGIN": "https://feedoong-atom-web.ohjtack.workers.dev",
+		"API_WRITE_KEY": "",
 		"SCHEDULER_KEY": ""
 	},
 	"kv_namespaces": [

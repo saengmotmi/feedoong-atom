@@ -11,6 +11,7 @@ const DEFAULT_CSV_PATH = path.join(
 );
 
 const API_BASE_URL = process.env.API_BASE_URL ?? "http://localhost:4000";
+const API_WRITE_KEY = process.env.API_WRITE_KEY ?? "";
 const MAX_CONCURRENCY = Number(process.env.IMPORT_CONCURRENCY ?? "4");
 const REQUEST_TIMEOUT_MS = Number(process.env.IMPORT_REQUEST_TIMEOUT_MS ?? "12000");
 const RETRY_ATTEMPTS = Number(process.env.IMPORT_RETRY_ATTEMPTS ?? "2");
@@ -25,6 +26,7 @@ const printUsage = () => {
   console.log("Usage: node scripts/import-subscriptions.mjs [csv-path]");
   console.log(`Default csv-path: ${DEFAULT_CSV_PATH}`);
   console.log(`API base URL: ${API_BASE_URL}`);
+  console.log(`API write key configured: ${API_WRITE_KEY.trim().length > 0 ? "yes" : "no"}`);
 };
 
 const parseCsv = (content) => {
@@ -249,12 +251,17 @@ const toCandidates = (rows) => {
 
 const postSource = async (rssUrl) => {
   try {
+    const headers = {
+      "content-type": "application/json"
+    };
+    if (API_WRITE_KEY.trim().length > 0) {
+      headers["x-api-key"] = API_WRITE_KEY;
+    }
+
     const response = await fetch(`${API_BASE_URL}/v1/sources`, {
       method: "POST",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      headers: {
-        "content-type": "application/json"
-      },
+      headers,
       body: JSON.stringify({ url: rssUrl })
     });
 

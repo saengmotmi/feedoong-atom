@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 NODE_VERSION="${NODE_VERSION:-$(cat .node-version)}"
 FNM_PREFIX=(fnm exec --using "$NODE_VERSION" -- corepack yarn)
+API_WRITE_KEY="${API_WRITE_KEY:-local-dev-key}"
 
 cleanup() {
   local exit_code=$?
@@ -21,10 +22,10 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-("${FNM_PREFIX[@]}" dev:api) &
+(API_WRITE_KEY="$API_WRITE_KEY" "${FNM_PREFIX[@]}" dev:api) &
 API_PID=$!
 
-("${FNM_PREFIX[@]}" dev:web) &
+(API_WRITE_KEY="$API_WRITE_KEY" "${FNM_PREFIX[@]}" dev:web) &
 WEB_PID=$!
 
 while true; do

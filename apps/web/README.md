@@ -59,6 +59,7 @@ yarn workspace @feedoong/web typecheck
 - vars:
   - `API_BASE_URL`
   - `CACHE_TTL_SECONDS`
+  - `API_WRITE_KEY` (선택: 설정 시 서버 액션에서 `x-api-key`로 전달)
 
 ## 주요 파일
 

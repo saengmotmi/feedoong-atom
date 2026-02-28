@@ -33,6 +33,7 @@ yarn workspace @feedoong/api dev
 yarn workspace @feedoong/api build
 yarn workspace @feedoong/api start
 yarn workspace @feedoong/api typecheck
+yarn workspace @feedoong/api test
 ```
 
 ## 환경변수
@@ -42,10 +43,18 @@ yarn workspace @feedoong/api typecheck
 - `PORT` (기본 `4000`)
 - `WEB_ORIGIN`
 - `DB_PATH`
+- `API_WRITE_KEY` (선택: 설정 시 `POST /v1/sources`, `POST /v1/sync` 인증 강제)
 - `SCHEDULER_KEY`
 - `X_BEARER_TOKEN` (선택)
 - `X_API_BASE_URL` (선택)
 - `X_MENTIONS_MAX_RESULTS` (선택)
+
+## 인증 헤더
+
+- 쓰기 요청(`POST /v1/sources`, `POST /v1/sync`): `x-api-key`
+- 내부 동기화(`POST /internal/sync`): `x-scheduler-key`
+
+키 환경변수가 비어 있으면 기존처럼 인증 없이 동작하고, 값이 설정되면 동일 값 헤더가 있어야 통과됩니다.
 
 ## 의존 경계
 

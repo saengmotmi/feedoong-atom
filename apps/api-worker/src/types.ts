@@ -40,6 +40,7 @@ export type SyncCommand =
 export type Bindings = {
   FEEDOONG_DB: KVNamespace;
   WEB_ORIGIN?: string;
+  API_WRITE_KEY?: string;
   SCHEDULER_KEY?: string;
   X_BEARER_TOKEN?: string;
   X_API_BASE_URL?: string;

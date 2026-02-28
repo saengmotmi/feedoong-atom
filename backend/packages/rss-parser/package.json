@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@feedoong/contracts": "0.1.0",
     "neverthrow": "^8.2.0",
     "remeda": "^2.30.0",
     "rss-parser": "3.13.0",

@@ -798,6 +798,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@feedoong/rss-parser@workspace:backend/packages/rss-parser"
   dependencies:
+    "@feedoong/contracts": "npm:0.1.0"
     "@types/node": "npm:20.16.11"
     neverthrow: "npm:^8.2.0"
     remeda: "npm:^2.30.0"
@@ -829,6 +830,7 @@ __metadata:
     neverthrow: "npm:^8.2.0"
     remeda: "npm:^2.30.0"
     ts-pattern: "npm:^5.8.0"
+    tsx: "npm:4.19.1"
     typescript: "npm:5.6.3"
   languageName: unknown
   linkType: soft
@@ -837,6 +839,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@feedoong/web@workspace:apps/web"
   dependencies:
+    "@feedoong/contracts": "npm:0.1.0"
     "@react-router/dev": "npm:^7.10.0"
     "@react-router/serve": "npm:^7.10.0"
     "@types/node": "npm:^22.19.11"

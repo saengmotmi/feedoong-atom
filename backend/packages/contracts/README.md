@@ -13,6 +13,12 @@ API 요청/검증 계약 공용 패키지입니다.
 - `InvalidJsonBodyError`
 - `DuplicateSourceUrlError`
 - `SourceRegistrationError`
+- `UrlNotAllowedError`
+- `UnauthorizedError`
+- `ensureAuthorizedByKey(...)`
+- `assertPublicSourceUrl(...)`
+- `isPublicHttpUrl(...)`
+- `createApiErrorResponse(...)`
 - `toErrorMessage(error, fallback)`
 
 ## 사용 예시

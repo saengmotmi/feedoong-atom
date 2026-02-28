@@ -1,3 +1,5 @@
+import { API_WRITE_KEY_HEADER } from "@feedoong/contracts";
+
 import type {
   ApiRuntime,
   ApiServiceBinding,
@@ -34,6 +36,20 @@ export const buildCacheControl = (ttlSeconds: number) =>
 
 const makeApiUrl = (baseUrl: string, path: string) => `${baseUrl}${path}`;
 
+const toApiErrorResponseMessage = (rawBody: string) => {
+  const trimmed = rawBody.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as { message?: unknown };
+    return typeof parsed.message === "string" ? parsed.message : trimmed;
+  } catch (_error) {
+    return trimmed;
+  }
+};
+
 export const fetchJson = async <T,>(
   url: string,
   init?: RequestInit,
@@ -54,7 +70,8 @@ export const fetchJson = async <T,>(
   const response = await fetchImpl(url, requestInit);
 
   if (!response.ok) {
-    const message = await response.text().catch(() => "");
+    const rawBody = await response.text().catch(() => "");
+    const message = toApiErrorResponseMessage(rawBody);
     throw new ApiRequestError(
       response.status,
       message || `API request failed (${response.status})`
@@ -82,7 +99,8 @@ export const resolveApiRuntime = (context: unknown): ApiRuntime => {
       ? SERVICE_BINDING_BASE_URL
       : process.env.API_BASE_URL ?? "http://localhost:4000",
     apiFetch: apiService?.fetch.bind(apiService) ?? fetch,
-    ttlSeconds: Number(process.env.CACHE_TTL_SECONDS ?? DEFAULT_CACHE_TTL_SECONDS)
+    ttlSeconds: Number(process.env.CACHE_TTL_SECONDS ?? DEFAULT_CACHE_TTL_SECONDS),
+    apiWriteKey: process.env["API_WRITE_KEY"] ?? ""
   };
 };
 
@@ -114,7 +132,12 @@ export const requestAddSource = async (runtime: ApiRuntime, url: string) =>
     {
       method: "POST",
       headers: {
-        "content-type": "application/json"
+        "content-type": "application/json",
+        ...(runtime.apiWriteKey
+          ? {
+              [API_WRITE_KEY_HEADER]: runtime.apiWriteKey
+            }
+          : {})
       },
       body: JSON.stringify({ url })
     },
@@ -128,7 +151,12 @@ export const requestSync = async (runtime: ApiRuntime) =>
     {
       method: "POST",
       headers: {
-        "content-type": "application/json"
+        "content-type": "application/json",
+        ...(runtime.apiWriteKey
+          ? {
+              [API_WRITE_KEY_HEADER]: runtime.apiWriteKey
+            }
+          : {})
       },
       body: "{}"
     },

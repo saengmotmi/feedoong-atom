@@ -1,13 +1,20 @@
 import {
+  API_ERROR_CODES,
+  API_WRITE_KEY_HEADER,
+  ApiDomainError,
+  createApiErrorResponse,
   DuplicateSourceUrlError,
-  INVALID_JSON_BODY_ERROR,
   InvalidJsonBodyError,
+  SCHEDULER_KEY_HEADER,
+  SourceRegistrationError,
+  assertPublicSourceUrl,
+  ensureAuthorizedByKey,
   itemsQuerySchema,
   readJsonBody,
-  SourceRegistrationError,
   sourceBodySchema,
   syncBodySchema
 } from "@feedoong/contracts";
+import { SourceNotFoundError } from "@feedoong/sync-core";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
@@ -35,6 +42,51 @@ const resolveAllowedOrigins = (originConfig: string) =>
     ? "*"
     : originConfig.split(",").map((origin) => origin.trim());
 
+const resolveRequestId = (context: { req: { header: (key: string) => string | undefined } }) =>
+  context.req.header("x-request-id") ??
+  context.req.header("cf-ray") ??
+  crypto.randomUUID();
+
+const toApiDomainMessage = (error: ApiDomainError) => {
+  if (error instanceof InvalidJsonBodyError) {
+    return "Invalid request";
+  }
+  if (error instanceof DuplicateSourceUrlError) {
+    return "이미 등록된 RSS URL입니다.";
+  }
+  if (error instanceof SourceRegistrationError) {
+    return "RSS를 등록할 수 없습니다.";
+  }
+  return error.message;
+};
+
+const toErrorResponse = (
+  context: { json: (body: unknown, status?: number) => Response },
+  requestId: string,
+  status: number,
+  code: (typeof API_ERROR_CODES)[keyof typeof API_ERROR_CODES],
+  message: string,
+  issues?: z.ZodIssue[]
+) =>
+  context.json(
+    createApiErrorResponse({
+      code,
+      message,
+      requestId,
+      issues
+    }),
+    status
+  );
+
+const requireWriteAuthorization = (
+  context: { env: Bindings; req: { header: (key: string) => string | undefined } }
+) =>
+  ensureAuthorizedByKey({
+    expectedKey: context.env.API_WRITE_KEY ?? "",
+    providedKey: context.req.header(API_WRITE_KEY_HEADER),
+    unauthorizedMessage: "유효하지 않은 API 키입니다."
+  });
+
 app.use("*", async (context, next) => {
   const originConfig = context.env.WEB_ORIGIN ?? "*";
   return cors({ origin: resolveAllowedOrigins(originConfig) })(context, next);
@@ -52,7 +104,9 @@ app.get("/v1/sources", async (context) => {
 });
 
 app.post("/v1/sources", async (context) => {
+  requireWriteAuthorization(context);
   const body = sourceBodySchema.parse(await readJsonBody(context.req.raw));
+  assertPublicSourceUrl(body.url);
   const storageRef = createStorageRef(await readStorage(context.env));
   const parseFeedPort = createParseFeedPort(context.env);
 
@@ -74,6 +128,7 @@ app.get("/v1/items", async (context) => {
 });
 
 app.post("/v1/sync", async (context) => {
+  requireWriteAuthorization(context);
   const body = syncBodySchema.parse(await readJsonBody(context.req.raw));
   const storageRef = createStorageRef(await readStorage(context.env));
   const command = parseSyncCommand(body.sourceId);
@@ -87,13 +142,11 @@ app.post("/v1/sync", async (context) => {
 });
 
 app.post("/internal/sync", async (context) => {
-  const schedulerKey = context.env.SCHEDULER_KEY ?? "";
-  if (schedulerKey) {
-    const key = context.req.header("x-scheduler-key");
-    if (key !== schedulerKey) {
-      return context.json({ message: "Invalid scheduler key" }, 401);
-    }
-  }
+  ensureAuthorizedByKey({
+    expectedKey: context.env.SCHEDULER_KEY ?? "",
+    providedKey: context.req.header(SCHEDULER_KEY_HEADER),
+    unauthorizedMessage: "유효하지 않은 스케줄러 키입니다."
+  });
 
   const storageRef = createStorageRef(await readStorage(context.env));
   const result = await syncAllSources(storageRef, createParseFeedPort(context.env));
@@ -102,40 +155,47 @@ app.post("/internal/sync", async (context) => {
 });
 
 app.onError((error, context) => {
+  const requestId = resolveRequestId(context);
+
   if (error instanceof z.ZodError) {
-    return context.json({
-      message: "Invalid request",
-      issues: error.issues
-    }, 400);
+    return toErrorResponse(
+      context,
+      requestId,
+      400,
+      API_ERROR_CODES.INVALID_REQUEST,
+      "Invalid request",
+      error.issues
+    );
   }
 
-  if (error instanceof InvalidJsonBodyError) {
-    return context.json({
-      message: "Invalid request"
-    }, 400);
+  if (error instanceof SourceNotFoundError) {
+    return toErrorResponse(
+      context,
+      requestId,
+      404,
+      API_ERROR_CODES.SOURCE_NOT_FOUND,
+      "요청한 소스를 찾을 수 없습니다."
+    );
   }
 
-  if (error instanceof Error && error.message === INVALID_JSON_BODY_ERROR) {
-    return context.json({
-      message: "Invalid request"
-    }, 400);
+  if (error instanceof ApiDomainError) {
+    return toErrorResponse(
+      context,
+      requestId,
+      error.status,
+      error.code,
+      toApiDomainMessage(error)
+    );
   }
 
-  if (error instanceof DuplicateSourceUrlError) {
-    return context.json({
-      message: "이미 등록된 RSS URL입니다."
-    }, 409);
-  }
-
-  if (error instanceof SourceRegistrationError) {
-    return context.json({
-      message: error.message
-    }, 422);
-  }
-
-  const message = error instanceof Error ? error.message : "알 수 없는 서버 에러";
-  console.error(error);
-  return context.json({ message }, 500);
+  console.error(`[api-worker][${requestId}]`, error);
+  return toErrorResponse(
+    context,
+    requestId,
+    500,
+    API_ERROR_CODES.INTERNAL_SERVER_ERROR,
+    "알 수 없는 서버 에러"
+  );
 });
 
 export default app;

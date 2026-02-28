@@ -1,3 +1,5 @@
+import { isPublicHttpUrl } from "@feedoong/contracts";
+
 const FEED_SUFFIX_PATTERN =
   /(\/(feed|rss)(\/|$)|\/atom\.xml$|\/index\.xml$|\/feeds\/|\.xml($|\?))/i;
 
@@ -9,17 +11,19 @@ const HTML_FEED_LINK_PATTERNS = [
 
 const FEED_HINT_PATTERN = /(feed|rss|atom|xml)/i;
 
-export const isHttpUrl = (value: string) => {
+const isXMentionsUrl = (value: string) => {
   try {
-    const url = new URL(value);
-    return (
-      url.protocol === "http:" ||
-      url.protocol === "https:" ||
-      url.protocol === "x-mentions:"
-    );
+    return new URL(value).protocol === "x-mentions:";
   } catch (_error) {
     return false;
   }
+};
+
+export const isHttpUrl = (value: string) => {
+  if (isXMentionsUrl(value)) {
+    return true;
+  }
+  return isPublicHttpUrl(value);
 };
 
 export const isLikelyFeedUrl = (inputUrl: URL) =>
@@ -57,6 +61,9 @@ export const buildRootFeedCandidates = (inputUrl: URL) => {
 
 export const discoverFeedLinksFromHtml = async (inputUrl: URL) => {
   if (isLikelyFeedUrl(inputUrl)) {
+    return [];
+  }
+  if (!isPublicHttpUrl(inputUrl.toString())) {
     return [];
   }
 

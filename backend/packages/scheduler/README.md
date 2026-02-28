@@ -8,6 +8,8 @@
 - 시작 시 즉시 1회 동기화 시도
 - cron 주기에 맞춰 반복 동기화
 - `SCHEDULER_KEY` 헤더 인증 지원
+- in-flight guard로 중복 실행 방지
+- timeout + retry(지수 backoff) 지원
 
 ## 개발/실행
 
@@ -32,6 +34,9 @@ yarn workspace @feedoong/scheduler typecheck
 - `API_BASE_URL` (기본 `http://localhost:4000`)
 - `SYNC_CRON` (기본 `*/30 * * * *`)
 - `SCHEDULER_KEY` (선택)
+- `SYNC_REQUEST_TIMEOUT_MS` (기본 `15000`)
+- `SYNC_RETRY_ATTEMPTS` (기본 `2`, 총 시도 = 기본 3회)
+- `SYNC_RETRY_BASE_DELAY_MS` (기본 `1500`)
 
 ## 운영 팁
 

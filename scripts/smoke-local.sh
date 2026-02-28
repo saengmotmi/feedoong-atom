@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 NODE_VERSION="${NODE_VERSION:-$(cat .node-version)}"
 FNM_PREFIX=(fnm exec --using "$NODE_VERSION" -- corepack yarn)
+API_WRITE_KEY="${API_WRITE_KEY:-local-dev-key}"
 TMP_DIR="$(mktemp -d)"
 API_LOG="$TMP_DIR/api.log"
 WEB_LOG="$TMP_DIR/web.log"
@@ -40,10 +41,10 @@ wait_for_url() {
 
 trap cleanup EXIT INT TERM
 
-("${FNM_PREFIX[@]}" dev:api >"$API_LOG" 2>&1) &
+(API_WRITE_KEY="$API_WRITE_KEY" "${FNM_PREFIX[@]}" dev:api >"$API_LOG" 2>&1) &
 API_PID=$!
 
-("${FNM_PREFIX[@]}" dev:web >"$WEB_LOG" 2>&1) &
+(API_WRITE_KEY="$API_WRITE_KEY" "${FNM_PREFIX[@]}" dev:web >"$WEB_LOG" 2>&1) &
 WEB_PID=$!
 
 wait_for_url "http://localhost:4000/health" || {
