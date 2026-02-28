@@ -13,6 +13,7 @@ dist
 .DS_Store
 *.log
 coverage
+*.tsbuildinfo
 
 .env
 .env.*
@@ -20,3 +21,4 @@ coverage
 
 backend/packages/api/data
 apps/extension/*.zip
+apps/web/build
