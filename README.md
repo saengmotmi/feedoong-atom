@@ -6,14 +6,14 @@
 
 - 핵심 컨셉 유지: RSS 기반으로 "내가 구독한 인사이트를 한 곳에서 보기"
 - 운영 단순화: API + Scheduler + RSS Parser를 최소 경계로 분리
-- 비용 절감: 복잡한 분산 시스템 대신 단일 파일 저장소(JSON) + 단순 잡 구조
+- 비용 절감: 운영 write path는 D1 단일 경로, 로컬 개발은 JSON 저장소로 단순화
 - 프론트 전략 고정: `Vite + React Router v7 Framework + RSC + Cloudflare Workers`
 
 ## Repo Structure
 
 ```text
 apps/
-  api-worker/          # Cloudflare Worker API 런타임(Hono + KV)
+  api-worker/          # Cloudflare Worker API 런타임(Hono + D1)
   web/                 # 개인용 웹 UI (피드 보기, 소스 추가/동기화)
   extension/           # 크롬 새 탭 -> web 리다이렉트
 backend/packages/
@@ -81,6 +81,12 @@ yarn dev:web:edge
 yarn smoke:local
 ```
 
+Worker 런타임(D1 포함) 스모크 테스트:
+
+```bash
+yarn smoke:worker-runtime
+```
+
 기존 구독 CSV(기본: `~/Downloads/feedoong_subscriptions_ohjtack@gmail.com.csv`) 가져오기:
 
 ```bash
@@ -137,6 +143,19 @@ yarn workspace @feedoong/web cf-typegen
 - `GET /v1/items?limit=50&offset=0`
 - `POST /v1/sync`
 - `POST /internal/sync` (scheduler 전용, `SCHEDULER_KEY` 검증)
+
+## Production Guardrails
+
+- CI: `/Users/ohjongtaek/Desktop/dev/feedoong-atom/.github/workflows/backend-quality.yml`
+  - `typecheck` + `test:backend` + `build`
+  - Worker runtime smoke(`yarn smoke:worker-runtime`)
+- 원격 스모크(수동 실행): `/Users/ohjongtaek/Desktop/dev/feedoong-atom/.github/workflows/remote-smoke.yml`
+  - 필요 설정: `PROD_API_BASE_URL`, `PROD_API_WRITE_KEY`, `PROD_SCHEDULER_KEY`
+- SLO 체크(30분 주기): `/Users/ohjongtaek/Desktop/dev/feedoong-atom/.github/workflows/slo-check.yml`
+  - 가용성/지연 임계치(`SLO_*`) 기반 실패 시 워크플로우 실패로 알림
+- D1 백업(일 1회): `/Users/ohjongtaek/Desktop/dev/feedoong-atom/.github/workflows/d1-backup.yml`
+  - 필요 설정: `D1_DATABASE_NAME`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`
+  - 산출물: SQL export 아티팩트(보존 14일)
 
 ## Notes
 

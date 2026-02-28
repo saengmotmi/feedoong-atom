@@ -133,6 +133,22 @@ flowchart LR
 4. Phase 3: 큐 분리(필요 시)
 - 동시성 폭주 구간에서만 Queues로 sync fan-out 제한
 
+## 10-1) 2026-03-01 적용 상태
+
+1. 완료
+- Worker 주 저장소 D1 단일 write path 전환
+- sync 상태 컬럼 반영: `next_check_at`, `error_count`, `retry_after_seconds`, `last_error_type`
+- sync-core에서 `next_check_at` 미래 소스 skip + 실패 시 backoff 상태 저장
+- CI에 Worker 런타임 로컬 스모크 추가 (`yarn smoke:worker-runtime`)
+
+2. 부분 완료
+- 원격 스모크 워크플로우 추가(수동 실행)
+- SLO 스케줄 체크 워크플로우 추가(30분 주기)
+- D1 일 1회 export 워크플로우 추가(설정값 주입 시 자동 실행)
+
+3. 미완료
+- Queues 기반 fan-out 도입
+
 ## 11) 수용 기준 (DoD)
 
 1. 저장소 레이어 기준 월 고정비가 예측 가능한 범위로 유지된다.

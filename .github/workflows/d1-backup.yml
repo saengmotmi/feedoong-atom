@@ -1,0 +1,75 @@
+name: d1-backup
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".node-version"
+          cache: yarn
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install Dependencies
+        run: corepack yarn install --immutable
+
+      - name: Resolve Backup Configuration
+        id: cfg
+        run: |
+          DATABASE_NAME="${D1_DATABASE_NAME:-${D1_DATABASE_NAME_SECRET:-}}"
+          ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-${CLOUDFLARE_ACCOUNT_ID_SECRET:-}}"
+          API_TOKEN="${CLOUDFLARE_API_TOKEN:-${CLOUDFLARE_API_TOKEN_SECRET:-}}"
+
+          if [[ -z "$DATABASE_NAME" || -z "$ACCOUNT_ID" || -z "$API_TOKEN" ]]; then
+            echo "run_backup=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          {
+            echo "run_backup=true"
+            echo "database_name=$DATABASE_NAME"
+            echo "account_id=$ACCOUNT_ID"
+            echo "api_token=$API_TOKEN"
+          } >> "$GITHUB_OUTPUT"
+        env:
+          D1_DATABASE_NAME: ${{ vars.D1_DATABASE_NAME }}
+          D1_DATABASE_NAME_SECRET: ${{ secrets.D1_DATABASE_NAME }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID_SECRET: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ vars.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN_SECRET: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Skip Notice
+        if: steps.cfg.outputs.run_backup != 'true'
+        run: echo "Skipping D1 backup: D1/CLOUDFLARE variables or secrets are not fully configured."
+
+      - name: Export Remote D1
+        if: steps.cfg.outputs.run_backup == 'true'
+        env:
+          D1_DATABASE_NAME: ${{ steps.cfg.outputs.database_name }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cfg.outputs.account_id }}
+          CLOUDFLARE_API_TOKEN: ${{ steps.cfg.outputs.api_token }}
+          BACKUP_DIR: ${{ github.workspace }}/backups/d1
+        run: corepack yarn backup:d1
+
+      - name: Upload Backup Artifact
+        if: steps.cfg.outputs.run_backup == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: d1-backup-${{ github.run_id }}
+          path: backups/d1/*.sql
+          if-no-files-found: error
+          retention-days: 14

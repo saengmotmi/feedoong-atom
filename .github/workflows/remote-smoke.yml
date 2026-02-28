@@ -1,0 +1,63 @@
+name: remote-smoke
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".node-version"
+          cache: yarn
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install Dependencies
+        run: corepack yarn install --immutable
+
+      - name: Resolve Environment
+        id: env
+        run: |
+          API_BASE_URL="${PROD_API_BASE_URL:-${PROD_API_BASE_URL_SECRET:-}}"
+          API_WRITE_KEY="${PROD_API_WRITE_KEY:-${PROD_API_WRITE_KEY_SECRET:-}}"
+          SCHEDULER_KEY="${PROD_SCHEDULER_KEY:-${PROD_SCHEDULER_KEY_SECRET:-}}"
+
+          if [[ -z "$API_BASE_URL" || -z "$API_WRITE_KEY" || -z "$SCHEDULER_KEY" ]]; then
+            echo "run_smoke=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          {
+            echo "run_smoke=true"
+            echo "api_base_url=$API_BASE_URL"
+            echo "api_write_key=$API_WRITE_KEY"
+            echo "scheduler_key=$SCHEDULER_KEY"
+          } >> "$GITHUB_OUTPUT"
+        env:
+          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
+          PROD_API_BASE_URL_SECRET: ${{ secrets.PROD_API_BASE_URL }}
+          PROD_API_WRITE_KEY: ${{ vars.PROD_API_WRITE_KEY }}
+          PROD_API_WRITE_KEY_SECRET: ${{ secrets.PROD_API_WRITE_KEY }}
+          PROD_SCHEDULER_KEY: ${{ vars.PROD_SCHEDULER_KEY }}
+          PROD_SCHEDULER_KEY_SECRET: ${{ secrets.PROD_SCHEDULER_KEY }}
+
+      - name: Skip Notice
+        if: steps.env.outputs.run_smoke != 'true'
+        run: echo "Skipping remote smoke: PROD_* variables/secrets are not fully configured."
+
+      - name: Remote Smoke
+        if: steps.env.outputs.run_smoke == 'true'
+        env:
+          API_BASE_URL: ${{ steps.env.outputs.api_base_url }}
+          API_WRITE_KEY: ${{ steps.env.outputs.api_write_key }}
+          SCHEDULER_KEY: ${{ steps.env.outputs.scheduler_key }}
+        run: corepack yarn smoke:remote

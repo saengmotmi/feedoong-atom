@@ -1,0 +1,55 @@
+name: slo-check
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".node-version"
+          cache: yarn
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install Dependencies
+        run: corepack yarn install --immutable
+
+      - name: Resolve Target URL
+        id: target
+        run: |
+          API_BASE_URL="${PROD_API_BASE_URL:-${PROD_API_BASE_URL_SECRET:-}}"
+          if [[ -z "$API_BASE_URL" ]]; then
+            echo "run_check=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "run_check=true" >> "$GITHUB_OUTPUT"
+          echo "api_base_url=$API_BASE_URL" >> "$GITHUB_OUTPUT"
+        env:
+          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
+          PROD_API_BASE_URL_SECRET: ${{ secrets.PROD_API_BASE_URL }}
+
+      - name: Skip Notice
+        if: steps.target.outputs.run_check != 'true'
+        run: echo "Skipping SLO check: PROD_API_BASE_URL is not configured."
+
+      - name: Run SLO Check
+        if: steps.target.outputs.run_check == 'true'
+        env:
+          API_BASE_URL: ${{ steps.target.outputs.api_base_url }}
+          SLO_REQUEST_COUNT: ${{ vars.SLO_REQUEST_COUNT }}
+          SLO_MIN_AVAILABILITY: ${{ vars.SLO_MIN_AVAILABILITY }}
+          SLO_MAX_P95_MS: ${{ vars.SLO_MAX_P95_MS }}
+          SLO_REQUEST_TIMEOUT_MS: ${{ vars.SLO_REQUEST_TIMEOUT_MS }}
+        run: corepack yarn check:slo

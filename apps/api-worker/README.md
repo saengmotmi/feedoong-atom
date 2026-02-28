@@ -14,7 +14,7 @@ Cloudflare Workers 기반 API 런타임입니다.
 - `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/api-worker/src/index.ts`
   - HTTP 라우팅 조합, 요청/응답 경계만 담당
 - `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/api-worker/src/storage.ts`
-  - D1 스키마 보장 + repository 어댑터
+  - D1 repository 어댑터 (`next_check_at`, `error_count`, `retry_after_seconds`, `last_error_type` 포함)
 - `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/api-worker/src/sync-usecase.ts`
   - sync command 파싱/실행 + `@feedoong/sync-core` 어댑터
 - `/Users/ohjongtaek/Desktop/dev/feedoong-atom/apps/api-worker/src/types.ts`
@@ -39,6 +39,12 @@ yarn workspace @feedoong/api-worker deploy
 ```bash
 yarn workspace @feedoong/api-worker wrangler d1 migrations apply feedoong-atom-db --local --config wrangler.jsonc
 yarn workspace @feedoong/api-worker wrangler d1 migrations apply feedoong-atom-db --remote --config wrangler.jsonc
+```
+
+운영 스모크(Worker 런타임 + D1)는 레포 루트에서:
+
+```bash
+yarn smoke:worker-runtime
 ```
 
 ## 테스트 / 타입 생성 / 타입체크
