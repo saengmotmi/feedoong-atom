@@ -21,13 +21,6 @@ export type ItemRow = {
   createdAt: string;
 };
 
-export type StorageShape = {
-  nextSourceId: number;
-  nextItemId: number;
-  sources: SourceRow[];
-  items: ItemRow[];
-};
-
 export type SyncCommand =
   | {
       kind: "single";
@@ -38,15 +31,12 @@ export type SyncCommand =
     };
 
 export type Bindings = {
-  FEEDOONG_DB: KVNamespace;
+  FEEDOONG_DB: D1Database;
   WEB_ORIGIN?: string;
   API_WRITE_KEY?: string;
   SCHEDULER_KEY?: string;
   X_BEARER_TOKEN?: string;
   X_API_BASE_URL?: string;
   X_MENTIONS_MAX_RESULTS?: string;
-};
-
-export type StorageRef = {
-  current: StorageShape;
+  PARSE_FEED_TIMEOUT_MS?: string;
 };

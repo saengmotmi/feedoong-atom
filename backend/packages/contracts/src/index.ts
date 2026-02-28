@@ -143,6 +143,21 @@ export const ensureAuthorizedByKey = (input: {
   }
 };
 
+export const requireConfiguredSecret = (input: {
+  value: string | null | undefined;
+  secretName: string;
+  message?: string;
+}) => {
+  const normalized = normalizeSecret(input.value);
+  if (normalized.length === 0) {
+    throw new ServerMisconfiguredError(
+      input.message ??
+        `필수 시크릿(${input.secretName})이 설정되지 않았습니다.`
+    );
+  }
+  return normalized;
+};
+
 const BLOCKED_HOSTNAMES = new Set([
   "localhost",
   "127.0.0.1",

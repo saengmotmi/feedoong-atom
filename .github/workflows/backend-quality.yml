@@ -1,0 +1,37 @@
+name: backend-quality
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".node-version"
+          cache: yarn
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install Dependencies
+        run: corepack yarn install --immutable
+
+      - name: Typecheck
+        run: corepack yarn typecheck
+
+      - name: Backend Regression Tests
+        run: corepack yarn test:backend
+
+      - name: Build
+        run: corepack yarn build

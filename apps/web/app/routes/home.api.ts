@@ -1,4 +1,5 @@
 import { API_WRITE_KEY_HEADER } from "@feedoong/contracts";
+import { requireConfiguredSecret } from "@feedoong/contracts";
 
 import type {
   ApiRuntime,
@@ -100,7 +101,10 @@ export const resolveApiRuntime = (context: unknown): ApiRuntime => {
       : process.env.API_BASE_URL ?? "http://localhost:4000",
     apiFetch: apiService?.fetch.bind(apiService) ?? fetch,
     ttlSeconds: Number(process.env.CACHE_TTL_SECONDS ?? DEFAULT_CACHE_TTL_SECONDS),
-    apiWriteKey: process.env["API_WRITE_KEY"] ?? ""
+    apiWriteKey: requireConfiguredSecret({
+      value: process.env["API_WRITE_KEY"],
+      secretName: "API_WRITE_KEY"
+    })
   };
 };
 

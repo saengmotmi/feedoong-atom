@@ -8,14 +8,16 @@
 	],
 	"vars": {
 		"WEB_ORIGIN": "https://feedoong-atom-web.ohjtack.workers.dev",
-		"API_WRITE_KEY": "",
-		"SCHEDULER_KEY": ""
+		"API_WRITE_KEY": "REPLACE_WITH_API_WRITE_KEY",
+		"SCHEDULER_KEY": "REPLACE_WITH_SCHEDULER_KEY",
+		"PARSE_FEED_TIMEOUT_MS": "15000"
 	},
-	"kv_namespaces": [
+	"d1_databases": [
 		{
 			"binding": "FEEDOONG_DB",
-			"id": "14fb78bffa8640518ccb995c228635c6",
-			"remote": true
+			"database_name": "feedoong-atom-db",
+			"database_id": "REPLACE_WITH_D1_DATABASE_ID",
+			"migrations_dir": "./migrations"
 		}
 	],
 	"observability": {

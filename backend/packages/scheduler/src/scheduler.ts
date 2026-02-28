@@ -22,13 +22,15 @@ export const toRetryDelayMs = (baseDelayMs: number, attempt: number) =>
   Math.min(baseDelayMs * 2 ** attempt, MAX_RETRY_DELAY_MS);
 
 export const createSyncRequestHeaders = (schedulerKey: string) => {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json"
-  };
-
-  if (schedulerKey.trim().length > 0) {
-    headers["x-scheduler-key"] = schedulerKey;
+  const normalizedKey = schedulerKey.trim();
+  if (normalizedKey.length === 0) {
+    throw new Error("schedulerKey is required");
   }
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-scheduler-key": normalizedKey
+  };
 
   return headers;
 };

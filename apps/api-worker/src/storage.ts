@@ -1,81 +1,299 @@
-import * as R from "remeda";
 import { DuplicateSourceUrlError } from "@feedoong/contracts";
 
 import type { ParsedFeedItem, SyncRepository } from "@feedoong/sync-core";
 
-import type { Bindings, SourceRow, StorageRef, StorageShape } from "./types";
+import type { Bindings, ItemRow, SourceRow } from "./types";
 
-const STORAGE_KEY = "feedoong.storage.v1";
-
-const createInitialStorage = (): StorageShape => ({
-  nextSourceId: 1,
-  nextItemId: 1,
-  sources: [],
-  items: []
-});
-
-export const readStorage = async (env: Bindings): Promise<StorageShape> => {
-  const loaded = await env.FEEDOONG_DB.get<StorageShape>(STORAGE_KEY, "json");
-  return loaded ?? createInitialStorage();
+type SourceSqlRow = {
+  id: number;
+  url: string;
+  title: string;
+  lastSyncedAt: string | null;
+  lastCheckedAt: string | null;
+  lastHeadEtag: string | null;
+  lastHeadLastModified: string | null;
+  createdAt: string;
 };
 
-export const writeStorage = async (env: Bindings, storage: StorageShape) => {
-  await env.FEEDOONG_DB.put(STORAGE_KEY, JSON.stringify(storage));
+type ItemSqlRow = {
+  id: number;
+  sourceId: number;
+  sourceTitle: string;
+  guid: string;
+  title: string;
+  link: string;
+  summary: string | null;
+  publishedAt: string | null;
+  createdAt: string;
 };
 
-export const createStorageRef = (storage: StorageShape): StorageRef => ({
-  current: storage
+const SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  url TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  last_synced_at TEXT,
+  last_checked_at TEXT,
+  last_head_etag TEXT,
+  last_head_last_modified TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sources_created_at ON sources(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_id INTEGER NOT NULL,
+  source_title TEXT NOT NULL,
+  guid TEXT NOT NULL,
+  title TEXT NOT NULL,
+  link TEXT NOT NULL,
+  summary TEXT,
+  published_at TEXT,
+  created_at TEXT NOT NULL,
+  UNIQUE(source_id, guid),
+  UNIQUE(link),
+  FOREIGN KEY(source_id) REFERENCES sources(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_items_source_id ON items(source_id);
+CREATE INDEX IF NOT EXISTS idx_items_order ON items(published_at DESC, created_at DESC);
+`;
+
+const schemaReadyByDb = new WeakMap<D1Database, Promise<void>>();
+
+const resolveDb = (env: Bindings) => env.FEEDOONG_DB;
+
+const isSourceUrlUniqueConstraintError = (error: unknown) =>
+  error instanceof Error &&
+  error.message.toLowerCase().includes("unique") &&
+  error.message.includes("sources.url");
+
+const ensureDbSchema = async (env: Bindings): Promise<void> => {
+  const db = resolveDb(env);
+  const cached = schemaReadyByDb.get(db);
+  if (cached) {
+    await cached;
+    return;
+  }
+
+  const next = db
+    .exec(SCHEMA_SQL)
+    .then(() => undefined)
+    .catch((error) => {
+      schemaReadyByDb.delete(db);
+      throw error;
+    });
+  schemaReadyByDb.set(db, next);
+  await next;
+};
+
+const mapSourceRow = (row: SourceSqlRow): SourceRow => ({
+  id: row.id,
+  url: row.url,
+  title: row.title,
+  lastSyncedAt: row.lastSyncedAt,
+  lastCheckedAt: row.lastCheckedAt,
+  lastHeadEtag: row.lastHeadEtag,
+  lastHeadLastModified: row.lastHeadLastModified,
+  createdAt: row.createdAt
 });
 
-export const listSources = (storage: StorageShape): SourceRow[] =>
-  [...storage.sources].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+const mapItemRow = (row: ItemSqlRow): ItemRow => ({
+  id: row.id,
+  sourceId: row.sourceId,
+  sourceTitle: row.sourceTitle,
+  guid: row.guid,
+  title: row.title,
+  link: row.link,
+  summary: row.summary,
+  publishedAt: row.publishedAt,
+  createdAt: row.createdAt
+});
 
-export const listItems = (storage: StorageShape, limit: number, offset: number) =>
-  [...storage.items]
-    .sort((a, b) => {
-      const left = a.publishedAt ?? a.createdAt;
-      const right = b.publishedAt ?? b.createdAt;
-      return left < right ? 1 : -1;
-    })
-    .slice(offset, offset + limit);
+export const listSources = async (env: Bindings): Promise<SourceRow[]> => {
+  await ensureDbSchema(env);
+  const result = await resolveDb(env)
+    .prepare(`
+      SELECT
+        id,
+        url,
+        title,
+        last_synced_at AS lastSyncedAt,
+        last_checked_at AS lastCheckedAt,
+        last_head_etag AS lastHeadEtag,
+        last_head_last_modified AS lastHeadLastModified,
+        created_at AS createdAt
+      FROM sources
+      ORDER BY created_at DESC
+    `)
+    .all<SourceSqlRow>();
 
-export const getSourceById = (storage: StorageShape, sourceId: number) =>
-  storage.sources.find((source) => source.id === sourceId) ?? null;
+  return (result.results ?? []).map(mapSourceRow);
+};
 
-export const addSource = (
-  storage: StorageShape,
+export const getSourceById = async (
+  env: Bindings,
+  sourceId: number
+): Promise<SourceRow | null> => {
+  await ensureDbSchema(env);
+
+  const row = await resolveDb(env)
+    .prepare(`
+      SELECT
+        id,
+        url,
+        title,
+        last_synced_at AS lastSyncedAt,
+        last_checked_at AS lastCheckedAt,
+        last_head_etag AS lastHeadEtag,
+        last_head_last_modified AS lastHeadLastModified,
+        created_at AS createdAt
+      FROM sources
+      WHERE id = ?
+      LIMIT 1
+    `)
+    .bind(sourceId)
+    .first<SourceSqlRow>();
+
+  return row ? mapSourceRow(row) : null;
+};
+
+export const addSource = async (
+  env: Bindings,
   url: string,
   title: string,
   now: () => string = () => new Date().toISOString()
-): { storage: StorageShape; source: SourceRow } => {
-  const isDuplicate = storage.sources.some((source) => source.url === url);
-  if (isDuplicate) {
+): Promise<SourceRow> => {
+  await ensureDbSchema(env);
+  const db = resolveDb(env);
+
+  const duplicate = await db
+    .prepare("SELECT id FROM sources WHERE url = ? LIMIT 1")
+    .bind(url)
+    .first<{ id: number }>();
+  if (duplicate) {
     throw new DuplicateSourceUrlError(url);
   }
 
-  const source: SourceRow = {
-    id: storage.nextSourceId,
-    url,
-    title,
-    lastSyncedAt: null,
-    lastCheckedAt: null,
-    lastHeadEtag: null,
-    lastHeadLastModified: null,
-    createdAt: now()
-  };
+  const createdAt = now();
+  const inserted = await db
+    .prepare(`
+      INSERT INTO sources (
+        url,
+        title,
+        last_synced_at,
+        last_checked_at,
+        last_head_etag,
+        last_head_last_modified,
+        created_at
+      )
+      VALUES (?, ?, NULL, NULL, NULL, NULL, ?)
+    `)
+    .bind(url, title, createdAt)
+    .run()
+    .catch((error: unknown) => {
+      if (isSourceUrlUniqueConstraintError(error)) {
+        throw new DuplicateSourceUrlError(url, { cause: error });
+      }
+      throw error;
+    });
 
-  return {
-    source,
-    storage: {
-      ...storage,
-      nextSourceId: storage.nextSourceId + 1,
-      sources: [...storage.sources, source]
-    }
-  };
+  const sourceId = Number((inserted as { meta?: { last_row_id?: number } }).meta?.last_row_id ?? 0);
+  if (!Number.isFinite(sourceId) || sourceId <= 0) {
+    throw new Error("failed to resolve inserted source id");
+  }
+
+  const source = await getSourceById(env, sourceId);
+  if (!source) {
+    throw new Error("failed to load inserted source");
+  }
+  return source;
 };
 
-export const updateSourceMetadata = (
-  storage: StorageShape,
+export const listItems = async (
+  env: Bindings,
+  limit: number,
+  offset: number
+): Promise<ItemRow[]> => {
+  await ensureDbSchema(env);
+  const result = await resolveDb(env)
+    .prepare(`
+      SELECT
+        id,
+        source_id AS sourceId,
+        source_title AS sourceTitle,
+        guid,
+        title,
+        link,
+        summary,
+        published_at AS publishedAt,
+        created_at AS createdAt
+      FROM items
+      ORDER BY COALESCE(published_at, created_at) DESC
+      LIMIT ?
+      OFFSET ?
+    `)
+    .bind(limit, offset)
+    .all<ItemSqlRow>();
+
+  return (result.results ?? []).map(mapItemRow);
+};
+
+export const insertItems = async (
+  env: Bindings,
+  sourceId: number,
+  items: ParsedFeedItem[],
+  now: () => string = () => new Date().toISOString()
+): Promise<number> => {
+  if (items.length === 0) {
+    return 0;
+  }
+
+  await ensureDbSchema(env);
+  const source = await getSourceById(env, sourceId);
+  if (!source) {
+    return 0;
+  }
+
+  const db = resolveDb(env);
+  const statements = items.map((item) => {
+    const createdAt = now();
+    return db
+      .prepare(`
+        INSERT OR IGNORE INTO items (
+          source_id,
+          source_title,
+          guid,
+          title,
+          link,
+          summary,
+          published_at,
+          created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .bind(
+        sourceId,
+        source.title,
+        item.guid,
+        item.title,
+        item.link,
+        item.summary,
+        item.publishedAt,
+        createdAt
+      );
+  });
+
+  const results = await db.batch(statements);
+  return results.reduce((acc, result) => {
+    const changes = Number(
+      (result as { meta?: { changes?: number } }).meta?.changes ?? 0
+    );
+    return acc + (changes > 0 ? 1 : 0);
+  }, 0);
+};
+
+export const updateSourceMetadata = async (
+  env: Bindings,
   sourceId: number,
   title: string,
   syncedAt: string,
@@ -84,160 +302,65 @@ export const updateSourceMetadata = (
     headEtag?: string | null;
     headLastModified?: string | null;
   }
-): StorageShape => {
-  const sources = R.map(storage.sources, (source) => {
-    if (source.id !== sourceId) {
-      return source;
-    }
+) => {
+  await ensureDbSchema(env);
+  const db = resolveDb(env);
 
-    const next: SourceRow = {
-      ...source,
-      title,
-      lastSyncedAt: syncedAt
-    };
+  const updates: string[] = ["title = ?", "last_synced_at = ?"];
+  const values: Array<string | number | null> = [title, syncedAt];
 
-    if (checkMetadata) {
-      if ("checkedAt" in checkMetadata) {
-        next.lastCheckedAt = checkMetadata.checkedAt ?? null;
-      }
-      if ("headEtag" in checkMetadata) {
-        next.lastHeadEtag = checkMetadata.headEtag ?? null;
-      }
-      if ("headLastModified" in checkMetadata) {
-        next.lastHeadLastModified = checkMetadata.headLastModified ?? null;
-      }
-    }
+  if (checkMetadata && Object.hasOwn(checkMetadata, "checkedAt")) {
+    updates.push("last_checked_at = ?");
+    values.push(checkMetadata.checkedAt ?? null);
+  }
+  if (checkMetadata && Object.hasOwn(checkMetadata, "headEtag")) {
+    updates.push("last_head_etag = ?");
+    values.push(checkMetadata.headEtag ?? null);
+  }
+  if (checkMetadata && Object.hasOwn(checkMetadata, "headLastModified")) {
+    updates.push("last_head_last_modified = ?");
+    values.push(checkMetadata.headLastModified ?? null);
+  }
 
-    return next;
-  });
+  values.push(sourceId);
+  await db
+    .prepare(`UPDATE sources SET ${updates.join(", ")} WHERE id = ?`)
+    .bind(...values)
+    .run();
 
-  const items = R.map(storage.items, (item) =>
-    item.sourceId === sourceId
-      ? {
-          ...item,
-          sourceTitle: title
-        }
-      : item
-  );
-
-  return {
-    ...storage,
-    sources,
-    items
-  };
+  await db
+    .prepare("UPDATE items SET source_title = ? WHERE source_id = ?")
+    .bind(title, sourceId)
+    .run();
 };
 
-export const updateSourceCheckMetadata = (
-  storage: StorageShape,
+export const updateSourceCheckMetadata = async (
+  env: Bindings,
   sourceId: number,
   checkedAt: string,
   headEtag: string | null,
   headLastModified: string | null
-): StorageShape => ({
-  ...storage,
-  sources: R.map(storage.sources, (source) =>
-    source.id === sourceId
-      ? {
-          ...source,
-          lastCheckedAt: checkedAt,
-          lastHeadEtag: headEtag,
-          lastHeadLastModified: headLastModified
-        }
-      : source
-  )
-});
-
-const sourceScopedItemExists = (
-  existingItems: StorageShape["items"],
-  sourceId: number,
-  item: ParsedFeedItem
-) =>
-  existingItems.some(
-    (existing) =>
-      existing.link === item.link ||
-      (existing.sourceId === sourceId && existing.guid === item.guid)
-  );
-
-export const insertItems = (
-  storage: StorageShape,
-  sourceId: number,
-  items: ParsedFeedItem[],
-  now: () => string = () => new Date().toISOString()
-): { storage: StorageShape; insertedCount: number } => {
-  const source = getSourceById(storage, sourceId);
-  if (!source) {
-    return {
-      storage,
-      insertedCount: 0
-    };
-  }
-
-  const reduced = R.reduce(
-    items,
-    (accumulator, item) => {
-      if (sourceScopedItemExists(accumulator.items, sourceId, item)) {
-        return accumulator;
-      }
-
-      const nextItem = {
-        id: accumulator.nextItemId,
-        sourceId,
-        sourceTitle: source.title,
-        guid: item.guid,
-        title: item.title,
-        link: item.link,
-        summary: item.summary,
-        publishedAt: item.publishedAt,
-        createdAt: now()
-      };
-
-      return {
-        nextItemId: accumulator.nextItemId + 1,
-        insertedCount: accumulator.insertedCount + 1,
-        items: [...accumulator.items, nextItem]
-      };
-    },
-    {
-      nextItemId: storage.nextItemId,
-      insertedCount: 0,
-      items: storage.items
-    }
-  );
-
-  return {
-    insertedCount: reduced.insertedCount,
-    storage: {
-      ...storage,
-      nextItemId: reduced.nextItemId,
-      items: reduced.items
-    }
-  };
+) => {
+  await ensureDbSchema(env);
+  await resolveDb(env)
+    .prepare(`
+      UPDATE sources
+      SET
+        last_checked_at = ?,
+        last_head_etag = ?,
+        last_head_last_modified = ?
+      WHERE id = ?
+    `)
+    .bind(checkedAt, headEtag, headLastModified, sourceId)
+    .run();
 };
 
-export const createRepository = (storageRef: StorageRef): SyncRepository => ({
-  getSourceById: (sourceId) => getSourceById(storageRef.current, sourceId),
-  listSources: () => [...storageRef.current.sources],
-  insertItems: (sourceId, items) => {
-    const next = insertItems(storageRef.current, sourceId, items);
-    storageRef.current = next.storage;
-    return next.insertedCount;
-  },
-  updateSourceMetadata: (sourceId, title, syncedAt, checkMetadata) => {
-    storageRef.current = updateSourceMetadata(
-      storageRef.current,
-      sourceId,
-      title,
-      syncedAt,
-      checkMetadata
-    );
-  },
-  updateSourceCheckMetadata: (sourceId, checkedAt, headEtag, headLastModified) => {
-    storageRef.current = updateSourceCheckMetadata(
-      storageRef.current,
-      sourceId,
-      checkedAt,
-      headEtag,
-      headLastModified
-    );
-  }
+export const createRepository = (env: Bindings): SyncRepository => ({
+  getSourceById: (sourceId) => getSourceById(env, sourceId),
+  listSources: () => listSources(env),
+  insertItems: (sourceId, items) => insertItems(env, sourceId, items),
+  updateSourceMetadata: (sourceId, title, syncedAt, checkMetadata) =>
+    updateSourceMetadata(env, sourceId, title, syncedAt, checkMetadata),
+  updateSourceCheckMetadata: (sourceId, checkedAt, headEtag, headLastModified) =>
+    updateSourceCheckMetadata(env, sourceId, checkedAt, headEtag, headLastModified)
 });

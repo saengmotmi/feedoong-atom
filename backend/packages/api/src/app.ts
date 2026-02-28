@@ -10,7 +10,9 @@ import {
   assertPublicSourceUrl,
   ensureAuthorizedByKey,
   itemsQuerySchema,
+  normalizeSecret,
   readJsonBody,
+  requireConfiguredSecret,
   sourceBodySchema,
   syncBodySchema
 } from "@feedoong/contracts";
@@ -33,14 +35,54 @@ export type CreateApiAppOptions = {
   webOrigin?: string;
   schedulerKey?: string;
   apiWriteKey?: string;
+  parseFeedTimeoutMs?: number;
+  enforceSecretValidation?: boolean;
 };
 
-const createDefaultParseFeedPort = (): ParseFeedPort => (url: string) =>
+const DEFAULT_PARSE_FEED_TIMEOUT_MS = 15000;
+
+const resolvePositiveTimeoutMs = (
+  rawValue: string | number | undefined,
+  fallbackValue: number
+) => {
+  const resolved =
+    typeof rawValue === "number"
+      ? rawValue
+      : Number(rawValue ?? fallbackValue);
+  return Number.isFinite(resolved) && resolved > 0
+    ? resolved
+    : fallbackValue;
+};
+
+const withTimeout = <T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  operationName: string
+): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(`${operationName} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    void promise.then(
+      (value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      }
+    );
+  });
+
+const createDefaultParseFeedPort = (timeoutMs: number): ParseFeedPort => (url: string) =>
   parseFeed(url, {
     xMentions: {
       token: process.env.X_BEARER_TOKEN ?? "",
       apiBaseUrl: process.env.X_API_BASE_URL,
-      maxResults: process.env.X_MENTIONS_MAX_RESULTS
+      maxResults: process.env.X_MENTIONS_MAX_RESULTS,
+      timeoutMs
     }
   });
 
@@ -87,11 +129,30 @@ const toErrorResponse = (
 
 export const createApiApp = (options: CreateApiAppOptions = {}) => {
   const webOrigin = options.webOrigin ?? process.env.WEB_ORIGIN ?? "http://localhost:5173";
-  const schedulerKey = options.schedulerKey ?? process.env.SCHEDULER_KEY ?? "";
-  const apiWriteKey = options.apiWriteKey ?? process.env.API_WRITE_KEY ?? "";
+  const enforceSecretValidation = options.enforceSecretValidation ?? true;
+  const rawSchedulerKey = options.schedulerKey ?? process.env.SCHEDULER_KEY ?? "";
+  const rawApiWriteKey = options.apiWriteKey ?? process.env.API_WRITE_KEY ?? "";
+  const schedulerKey = enforceSecretValidation
+    ? requireConfiguredSecret({
+        value: rawSchedulerKey,
+        secretName: "SCHEDULER_KEY"
+      })
+    : normalizeSecret(rawSchedulerKey);
+  const apiWriteKey = enforceSecretValidation
+    ? requireConfiguredSecret({
+        value: rawApiWriteKey,
+        secretName: "API_WRITE_KEY"
+      })
+    : normalizeSecret(rawApiWriteKey);
+  const parseFeedTimeoutMs = resolvePositiveTimeoutMs(
+    options.parseFeedTimeoutMs ?? process.env.PARSE_FEED_TIMEOUT_MS,
+    DEFAULT_PARSE_FEED_TIMEOUT_MS
+  );
   const db =
     options.db ?? new FeedoongDb(process.env.DB_PATH ?? "./data/feedoong.json");
-  const parseFeedPort = options.parseFeedPort ?? createDefaultParseFeedPort();
+  const baseParseFeedPort = options.parseFeedPort ?? createDefaultParseFeedPort(parseFeedTimeoutMs);
+  const parseFeedPort: ParseFeedPort = (url) =>
+    withTimeout(baseParseFeedPort(url), parseFeedTimeoutMs, "parseFeed");
 
   const app = new Hono();
   app.use("*", cors({ origin: resolveAllowedOrigins(webOrigin) }));

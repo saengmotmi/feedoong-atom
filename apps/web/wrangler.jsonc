@@ -15,7 +15,7 @@
   "vars": {
     "API_BASE_URL": "https://feedoong-atom-api.ohjtack.workers.dev",
     "CACHE_TTL_SECONDS": "60",
-    "API_WRITE_KEY": ""
+    "API_WRITE_KEY": "REPLACE_WITH_API_WRITE_KEY"
   },
   "observability": {
     "enabled": true

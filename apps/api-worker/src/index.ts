@@ -10,6 +10,7 @@ import {
   assertPublicSourceUrl,
   ensureAuthorizedByKey,
   itemsQuerySchema,
+  requireConfiguredSecret,
   readJsonBody,
   sourceBodySchema,
   syncBodySchema
@@ -21,11 +22,8 @@ import { z } from "zod";
 
 import {
   addSource,
-  createStorageRef,
   listItems,
-  listSources,
-  readStorage,
-  writeStorage
+  listSources
 } from "./storage";
 import {
   createParseFeedPort,
@@ -80,12 +78,33 @@ const toErrorResponse = (
 
 const requireWriteAuthorization = (
   context: { env: Bindings; req: { header: (key: string) => string | undefined } }
-) =>
-  ensureAuthorizedByKey({
-    expectedKey: context.env.API_WRITE_KEY ?? "",
+) => {
+  const expectedKey = requireConfiguredSecret({
+    value: context.env.API_WRITE_KEY,
+    secretName: "API_WRITE_KEY"
+  });
+
+  return ensureAuthorizedByKey({
+    expectedKey,
     providedKey: context.req.header(API_WRITE_KEY_HEADER),
     unauthorizedMessage: "유효하지 않은 API 키입니다."
   });
+};
+
+const requireSchedulerAuthorization = (
+  context: { env: Bindings; req: { header: (key: string) => string | undefined } }
+) => {
+  const expectedKey = requireConfiguredSecret({
+    value: context.env.SCHEDULER_KEY,
+    secretName: "SCHEDULER_KEY"
+  });
+
+  return ensureAuthorizedByKey({
+    expectedKey,
+    providedKey: context.req.header(SCHEDULER_KEY_HEADER),
+    unauthorizedMessage: "유효하지 않은 스케줄러 키입니다."
+  });
+};
 
 app.use("*", async (context, next) => {
   const originConfig = context.env.WEB_ORIGIN ?? "*";
@@ -99,58 +118,47 @@ app.get("/health", (context) =>
   }));
 
 app.get("/v1/sources", async (context) => {
-  const storage = await readStorage(context.env);
-  return context.json({ sources: listSources(storage) });
+  const sources = await listSources(context.env);
+  return context.json({ sources });
 });
 
 app.post("/v1/sources", async (context) => {
   requireWriteAuthorization(context);
   const body = sourceBodySchema.parse(await readJsonBody(context.req.raw));
   assertPublicSourceUrl(body.url);
-  const storageRef = createStorageRef(await readStorage(context.env));
   const parseFeedPort = createParseFeedPort(context.env);
 
   const parsed = await parseFeedPort(body.url).catch((error: unknown) => {
     throw new SourceRegistrationError(error);
   });
-  const next = addSource(storageRef.current, parsed.feedUrl, parsed.title);
-  storageRef.current = next.storage;
-  await writeStorage(context.env, storageRef.current);
-  return context.json({ source: next.source }, 201);
+  const source = await addSource(context.env, parsed.feedUrl, parsed.title);
+  return context.json({ source }, 201);
 });
 
 app.get("/v1/items", async (context) => {
   const query = itemsQuerySchema.parse(context.req.query());
-  const storage = await readStorage(context.env);
+  const items = await listItems(context.env, query.limit, query.offset);
   return context.json({
-    items: listItems(storage, query.limit, query.offset)
+    items
   });
 });
 
 app.post("/v1/sync", async (context) => {
   requireWriteAuthorization(context);
   const body = syncBodySchema.parse(await readJsonBody(context.req.raw));
-  const storageRef = createStorageRef(await readStorage(context.env));
   const command = parseSyncCommand(body.sourceId);
   const result = await executeSyncCommand(
-    storageRef,
+    context.env,
     createParseFeedPort(context.env),
     command
   );
-  await writeStorage(context.env, storageRef.current);
   return context.json(result);
 });
 
 app.post("/internal/sync", async (context) => {
-  ensureAuthorizedByKey({
-    expectedKey: context.env.SCHEDULER_KEY ?? "",
-    providedKey: context.req.header(SCHEDULER_KEY_HEADER),
-    unauthorizedMessage: "유효하지 않은 스케줄러 키입니다."
-  });
+  requireSchedulerAuthorization(context);
 
-  const storageRef = createStorageRef(await readStorage(context.env));
-  const result = await syncAllSources(storageRef, createParseFeedPort(context.env));
-  await writeStorage(context.env, storageRef.current);
+  const result = await syncAllSources(context.env, createParseFeedPort(context.env));
   return context.json(result);
 });
 
