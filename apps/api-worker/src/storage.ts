@@ -1,4 +1,5 @@
 import * as R from "remeda";
+import { DuplicateSourceUrlError } from "@feedoong/contracts";
 
 import type { ParsedFeedItem, SyncRepository } from "@feedoong/sync-core";
 
@@ -49,7 +50,7 @@ export const addSource = (
 ): { storage: StorageShape; source: SourceRow } => {
   const isDuplicate = storage.sources.some((source) => source.url === url);
   if (isDuplicate) {
-    throw new Error("DUPLICATE_SOURCE_URL");
+    throw new DuplicateSourceUrlError(url);
   }
 
   const source: SourceRow = {

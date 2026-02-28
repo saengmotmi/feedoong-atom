@@ -10,6 +10,10 @@ API 요청/검증 계약 공용 패키지입니다.
 - `syncBodySchema`
 - `readJsonBody(request)`
 - `INVALID_JSON_BODY_ERROR`
+- `InvalidJsonBodyError`
+- `DuplicateSourceUrlError`
+- `SourceRegistrationError`
+- `toErrorMessage(error, fallback)`
 
 ## 사용 예시
 

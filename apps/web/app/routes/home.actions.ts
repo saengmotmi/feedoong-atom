@@ -12,27 +12,38 @@ export const parseActionIntent = (rawIntent: FormDataEntryValue | null): ActionI
 
 const redirectWithStatus = (status: string) => redirect(`/?status=${status}`);
 
+const runActionWithRedirect = async (
+  action: () => Promise<unknown>,
+  successStatus: string,
+  failStatus: string
+) => {
+  try {
+    await action();
+    return redirectWithStatus(successStatus);
+  } catch (_error) {
+    return redirectWithStatus(failStatus);
+  }
+};
+
 const handleAddSourceIntent = async ({ formData, runtime }: IntentHandlerArgs) => {
   const url = String(formData.get("url") ?? "").trim();
   if (!url) {
     return redirectWithStatus("source-error");
   }
 
-  try {
-    await requestAddSource(runtime, url);
-    return redirectWithStatus("source-added");
-  } catch (_error) {
-    return redirectWithStatus("source-error");
-  }
+  return runActionWithRedirect(
+    () => requestAddSource(runtime, url),
+    "source-added",
+    "source-error"
+  );
 };
 
 const handleSyncIntent = async ({ runtime }: IntentHandlerArgs) => {
-  try {
-    await requestSync(runtime);
-    return redirectWithStatus("synced");
-  } catch (_error) {
-    return redirectWithStatus("sync-error");
-  }
+  return runActionWithRedirect(
+    () => requestSync(runtime),
+    "synced",
+    "sync-error"
+  );
 };
 
 const actionHandlers: Record<ActionIntent, (args: IntentHandlerArgs) => Promise<Response>> = {

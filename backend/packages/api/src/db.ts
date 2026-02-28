@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { DuplicateSourceUrlError } from "@feedoong/contracts";
 
 export type SourceRow = {
   id: number;
@@ -80,7 +81,7 @@ export class FeedoongDb {
     const data = this.read();
     const isDuplicate = data.sources.some((source) => source.url === url);
     if (isDuplicate) {
-      throw new Error("DUPLICATE_SOURCE_URL");
+      throw new DuplicateSourceUrlError(url);
     }
 
     const source: SourceRow = {

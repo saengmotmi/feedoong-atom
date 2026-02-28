@@ -1,7 +1,10 @@
 import {
+  DuplicateSourceUrlError,
   INVALID_JSON_BODY_ERROR,
+  InvalidJsonBodyError,
   itemsQuerySchema,
   readJsonBody,
+  SourceRegistrationError,
   sourceBodySchema,
   syncBodySchema
 } from "@feedoong/contracts";
@@ -53,24 +56,13 @@ app.post("/v1/sources", async (context) => {
   const storageRef = createStorageRef(await readStorage(context.env));
   const parseFeedPort = createParseFeedPort(context.env);
 
-  try {
-    const parsed = await parseFeedPort(body.url);
-    const next = addSource(storageRef.current, parsed.feedUrl, parsed.title);
-    storageRef.current = next.storage;
-    await writeStorage(context.env, storageRef.current);
-    return context.json({ source: next.source }, 201);
-  } catch (error) {
-    if (error instanceof Error && error.message === "DUPLICATE_SOURCE_URL") {
-      return context.json({
-        message: "이미 등록된 RSS URL입니다."
-      }, 409);
-    }
-
-    const message = error instanceof Error ? error.message : "RSS를 불러올 수 없습니다.";
-    return context.json({
-      message: `RSS를 등록할 수 없습니다: ${message}`
-    }, 422);
-  }
+  const parsed = await parseFeedPort(body.url).catch((error: unknown) => {
+    throw new SourceRegistrationError(error);
+  });
+  const next = addSource(storageRef.current, parsed.feedUrl, parsed.title);
+  storageRef.current = next.storage;
+  await writeStorage(context.env, storageRef.current);
+  return context.json({ source: next.source }, 201);
 });
 
 app.get("/v1/items", async (context) => {
@@ -117,10 +109,28 @@ app.onError((error, context) => {
     }, 400);
   }
 
+  if (error instanceof InvalidJsonBodyError) {
+    return context.json({
+      message: "Invalid request"
+    }, 400);
+  }
+
   if (error instanceof Error && error.message === INVALID_JSON_BODY_ERROR) {
     return context.json({
       message: "Invalid request"
     }, 400);
+  }
+
+  if (error instanceof DuplicateSourceUrlError) {
+    return context.json({
+      message: "이미 등록된 RSS URL입니다."
+    }, 409);
+  }
+
+  if (error instanceof SourceRegistrationError) {
+    return context.json({
+      message: error.message
+    }, 422);
   }
 
   const message = error instanceof Error ? error.message : "알 수 없는 서버 에러";

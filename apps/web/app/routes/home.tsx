@@ -1,6 +1,11 @@
 import { data } from "react-router";
 
-import { buildCacheControl, loadDashboardPayload, resolveApiRuntime } from "./home.api";
+import {
+  buildCacheControl,
+  loadDashboardPayload,
+  resolveApiRuntime,
+  toApiErrorMessage
+} from "./home.api";
 import { parseActionIntent, runActionIntent } from "./home.actions";
 import { formatPublishedLabel, getHostLabel, parseStatusLabel, toSummary } from "./home.presenter";
 import type { Route } from "./+types/home";
@@ -36,8 +41,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       }
     );
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "피드를 가져오지 못했습니다.";
+    const errorMessage = toApiErrorMessage(error, "피드를 가져오지 못했습니다.");
 
     return data(
       {

@@ -12,6 +12,23 @@ const DEFAULT_CACHE_TTL_SECONDS = 60;
 const DEFAULT_STALE_SECONDS = 300;
 const SERVICE_BINDING_BASE_URL = "http://api.internal";
 
+export class ApiRequestError extends Error {
+  readonly status: number;
+  readonly responseBody: string;
+
+  constructor(status: number, responseBody: string, options?: { cause?: unknown }) {
+    super(responseBody || `API request failed (${status})`, options);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.responseBody = responseBody;
+  }
+}
+
+export const toApiErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error && error.message.trim().length > 0
+    ? error.message
+    : fallback;
+
 export const buildCacheControl = (ttlSeconds: number) =>
   `public, max-age=0, s-maxage=${ttlSeconds}, stale-while-revalidate=${DEFAULT_STALE_SECONDS}`;
 
@@ -37,8 +54,11 @@ export const fetchJson = async <T,>(
   const response = await fetchImpl(url, requestInit);
 
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `API request failed (${response.status})`);
+    const message = await response.text().catch(() => "");
+    throw new ApiRequestError(
+      response.status,
+      message || `API request failed (${response.status})`
+    );
   }
 
   return response.json() as Promise<T>;
