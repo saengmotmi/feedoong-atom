@@ -12,6 +12,10 @@ type SourceSqlRow = {
   lastCheckedAt: string | null;
   lastHeadEtag: string | null;
   lastHeadLastModified: string | null;
+  nextCheckAt: string | null;
+  errorCount: number;
+  retryAfterSeconds: number | null;
+  lastErrorType: string | null;
   createdAt: string;
 };
 
@@ -27,40 +31,28 @@ type ItemSqlRow = {
   createdAt: string;
 };
 
-const SCHEMA_SQL = `
-CREATE TABLE IF NOT EXISTS sources (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  url TEXT NOT NULL UNIQUE,
-  title TEXT NOT NULL,
-  last_synced_at TEXT,
-  last_checked_at TEXT,
-  last_head_etag TEXT,
-  last_head_last_modified TEXT,
-  created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_sources_created_at ON sources(created_at DESC);
-
-CREATE TABLE IF NOT EXISTS items (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  source_id INTEGER NOT NULL,
-  source_title TEXT NOT NULL,
-  guid TEXT NOT NULL,
-  title TEXT NOT NULL,
-  link TEXT NOT NULL,
-  summary TEXT,
-  published_at TEXT,
-  created_at TEXT NOT NULL,
-  UNIQUE(source_id, guid),
-  UNIQUE(link),
-  FOREIGN KEY(source_id) REFERENCES sources(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_items_source_id ON items(source_id);
-CREATE INDEX IF NOT EXISTS idx_items_order ON items(published_at DESC, created_at DESC);
-`;
-
 const schemaReadyByDb = new WeakMap<D1Database, Promise<void>>();
 
 const resolveDb = (env: Bindings) => env.FEEDOONG_DB;
+
+const DEFAULT_RETRY_AFTER_SECONDS = 300;
+const MAX_RETRY_AFTER_SECONDS = 21600;
+
+const resolveRetryAfterSeconds = (
+  errorCount: number,
+  retryAfterSeconds?: number | null
+) => {
+  if (typeof retryAfterSeconds === "number" && retryAfterSeconds > 0) {
+    return Math.min(Math.floor(retryAfterSeconds), MAX_RETRY_AFTER_SECONDS);
+  }
+  return Math.min(
+    DEFAULT_RETRY_AFTER_SECONDS * 2 ** Math.max(0, errorCount - 1),
+    MAX_RETRY_AFTER_SECONDS
+  );
+};
+
+const toNextCheckAt = (failedAt: string, retryAfterSeconds: number) =>
+  new Date(new Date(failedAt).getTime() + retryAfterSeconds * 1000).toISOString();
 
 const isSourceUrlUniqueConstraintError = (error: unknown) =>
   error instanceof Error &&
@@ -76,11 +68,15 @@ const ensureDbSchema = async (env: Bindings): Promise<void> => {
   }
 
   const next = db
-    .exec(SCHEMA_SQL)
+    .prepare("SELECT 1 FROM sources LIMIT 1")
+    .first()
     .then(() => undefined)
     .catch((error) => {
       schemaReadyByDb.delete(db);
-      throw error;
+      throw new Error(
+        "D1 schema is not initialized. Apply migrations before serving traffic.",
+        { cause: error }
+      );
     });
   schemaReadyByDb.set(db, next);
   await next;
@@ -94,6 +90,10 @@ const mapSourceRow = (row: SourceSqlRow): SourceRow => ({
   lastCheckedAt: row.lastCheckedAt,
   lastHeadEtag: row.lastHeadEtag,
   lastHeadLastModified: row.lastHeadLastModified,
+  nextCheckAt: row.nextCheckAt,
+  errorCount: row.errorCount,
+  retryAfterSeconds: row.retryAfterSeconds,
+  lastErrorType: row.lastErrorType,
   createdAt: row.createdAt
 });
 
@@ -121,6 +121,10 @@ export const listSources = async (env: Bindings): Promise<SourceRow[]> => {
         last_checked_at AS lastCheckedAt,
         last_head_etag AS lastHeadEtag,
         last_head_last_modified AS lastHeadLastModified,
+        next_check_at AS nextCheckAt,
+        error_count AS errorCount,
+        retry_after_seconds AS retryAfterSeconds,
+        last_error_type AS lastErrorType,
         created_at AS createdAt
       FROM sources
       ORDER BY created_at DESC
@@ -146,6 +150,10 @@ export const getSourceById = async (
         last_checked_at AS lastCheckedAt,
         last_head_etag AS lastHeadEtag,
         last_head_last_modified AS lastHeadLastModified,
+        next_check_at AS nextCheckAt,
+        error_count AS errorCount,
+        retry_after_seconds AS retryAfterSeconds,
+        last_error_type AS lastErrorType,
         created_at AS createdAt
       FROM sources
       WHERE id = ?
@@ -184,9 +192,13 @@ export const addSource = async (
         last_checked_at,
         last_head_etag,
         last_head_last_modified,
+        next_check_at,
+        error_count,
+        retry_after_seconds,
+        last_error_type,
         created_at
       )
-      VALUES (?, ?, NULL, NULL, NULL, NULL, ?)
+      VALUES (?, ?, NULL, NULL, NULL, NULL, NULL, 0, NULL, NULL, ?)
     `)
     .bind(url, title, createdAt)
     .run()
@@ -306,8 +318,15 @@ export const updateSourceMetadata = async (
   await ensureDbSchema(env);
   const db = resolveDb(env);
 
-  const updates: string[] = ["title = ?", "last_synced_at = ?"];
-  const values: Array<string | number | null> = [title, syncedAt];
+  const updates: string[] = [
+    "title = ?",
+    "last_synced_at = ?",
+    "next_check_at = ?",
+    "error_count = ?",
+    "retry_after_seconds = ?",
+    "last_error_type = ?"
+  ];
+  const values: Array<string | number | null> = [title, syncedAt, null, 0, null, null];
 
   if (checkMetadata && Object.hasOwn(checkMetadata, "checkedAt")) {
     updates.push("last_checked_at = ?");
@@ -355,6 +374,50 @@ export const updateSourceCheckMetadata = async (
     .run();
 };
 
+export const updateSourceFailureState = async (
+  env: Bindings,
+  sourceId: number,
+  failedAt: string,
+  errorType: string,
+  retryAfterSeconds?: number | null
+) => {
+  await ensureDbSchema(env);
+  const db = resolveDb(env);
+
+  const current = await getSourceById(env, sourceId);
+  if (!current) {
+    return;
+  }
+
+  const nextErrorCount = (current.errorCount ?? 0) + 1;
+  const resolvedRetryAfterSeconds = resolveRetryAfterSeconds(
+    nextErrorCount,
+    retryAfterSeconds
+  );
+  const nextCheckAt = toNextCheckAt(failedAt, resolvedRetryAfterSeconds);
+
+  await db
+    .prepare(`
+      UPDATE sources
+      SET
+        last_checked_at = ?,
+        error_count = ?,
+        retry_after_seconds = ?,
+        next_check_at = ?,
+        last_error_type = ?
+      WHERE id = ?
+    `)
+    .bind(
+      failedAt,
+      nextErrorCount,
+      resolvedRetryAfterSeconds,
+      nextCheckAt,
+      errorType,
+      sourceId
+    )
+    .run();
+};
+
 export const createRepository = (env: Bindings): SyncRepository => ({
   getSourceById: (sourceId) => getSourceById(env, sourceId),
   listSources: () => listSources(env),
@@ -362,5 +425,18 @@ export const createRepository = (env: Bindings): SyncRepository => ({
   updateSourceMetadata: (sourceId, title, syncedAt, checkMetadata) =>
     updateSourceMetadata(env, sourceId, title, syncedAt, checkMetadata),
   updateSourceCheckMetadata: (sourceId, checkedAt, headEtag, headLastModified) =>
-    updateSourceCheckMetadata(env, sourceId, checkedAt, headEtag, headLastModified)
+    updateSourceCheckMetadata(env, sourceId, checkedAt, headEtag, headLastModified),
+  updateSourceFailureState: (
+    sourceId,
+    failedAt,
+    errorType,
+    retryAfterSeconds
+  ) =>
+    updateSourceFailureState(
+      env,
+      sourceId,
+      failedAt,
+      errorType,
+      retryAfterSeconds
+    )
 });

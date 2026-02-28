@@ -10,6 +10,7 @@ import {
   listItems,
   listSources,
   updateSourceCheckMetadata,
+  updateSourceFailureState,
   updateSourceMetadata
 } from "../src/storage.js";
 import { createFakeD1Database } from "./helpers/fake-d1.js";
@@ -162,6 +163,10 @@ describe("api-worker storage regression", () => {
     assert.equal(updated.lastCheckedAt, "2026-01-02T00:00:00.000Z");
     assert.equal(updated.lastHeadEtag, "etag-v2");
     assert.equal(updated.lastHeadLastModified, "Wed, 01 Jan 2026 00:00:00 GMT");
+    assert.equal(updated.errorCount, 0);
+    assert.equal(updated.retryAfterSeconds, null);
+    assert.equal(updated.nextCheckAt, null);
+    assert.equal(updated.lastErrorType, null);
 
     const items = await listItems(env, 10, 0);
     assert.equal(items[0]?.sourceTitle, "new-title");
@@ -185,5 +190,26 @@ describe("api-worker storage regression", () => {
     assert.equal(updated.lastHeadEtag, "etag-v3");
     assert.equal(updated.lastHeadLastModified, "Thu, 02 Jan 2026 00:00:00 GMT");
     assert.equal(updated.title, "source-title");
+  });
+
+  it("실패 상태 업데이트는 errorCount/retryAfter/nextCheckAt을 갱신한다", async () => {
+    const env = createTestEnv();
+    const source = await addSource(env, "https://example.com/feed.xml", "source-title");
+
+    await updateSourceFailureState(
+      env,
+      source.id,
+      "2026-01-03T00:00:00.000Z",
+      "HTTP_429",
+      1200
+    );
+
+    const updated = await getSourceById(env, source.id);
+    assert.ok(updated);
+    assert.equal(updated.errorCount, 1);
+    assert.equal(updated.retryAfterSeconds, 1200);
+    assert.equal(updated.lastErrorType, "HTTP_429");
+    assert.equal(updated.nextCheckAt, "2026-01-03T00:20:00.000Z");
+    assert.equal(updated.lastCheckedAt, "2026-01-03T00:00:00.000Z");
   });
 });

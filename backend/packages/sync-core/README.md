@@ -9,6 +9,8 @@
 - `syncAllSources(deps)`
 - HEAD 요청 기반 변경 여부 판단
 - 변경 없으면 `status: "skipped"` 반환
+- `nextCheckAt` 기반 due source만 sync
+- 실패 시 backoff 상태(`errorCount`, `retryAfterSeconds`) 갱신
 
 ## 내부 모듈 구조 (v0.2)
 
@@ -30,7 +32,7 @@
 - `SyncRepository`
   - `getSourceById`, `listSources`
   - `insertItems`
-  - `updateSourceMetadata`, `updateSourceCheckMetadata`
+  - `updateSourceMetadata`, `updateSourceCheckMetadata`, `updateSourceFailureState`
 - `ParseFeedPort`
 - 선택: `fetchImpl`, `now`, `headTimeoutMs`, `headUserAgent`
 

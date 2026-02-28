@@ -16,7 +16,9 @@ const createRepository = (db: FeedoongDb): SyncRepository => ({
   updateSourceMetadata: (sourceId, title, syncedAt, checkMetadata) =>
     db.updateSourceMetadata(sourceId, title, syncedAt, checkMetadata),
   updateSourceCheckMetadata: (sourceId, checkedAt, headEtag, headLastModified) =>
-    db.updateSourceCheckMetadata(sourceId, checkedAt, headEtag, headLastModified)
+    db.updateSourceCheckMetadata(sourceId, checkedAt, headEtag, headLastModified),
+  updateSourceFailureState: (sourceId, failedAt, errorType, retryAfterSeconds) =>
+    db.updateSourceFailureState(sourceId, failedAt, errorType, retryAfterSeconds)
 });
 
 export type { SyncDetail };

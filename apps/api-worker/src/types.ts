@@ -6,6 +6,10 @@ export type SourceRow = {
   lastCheckedAt?: string | null;
   lastHeadEtag?: string | null;
   lastHeadLastModified?: string | null;
+  nextCheckAt?: string | null;
+  errorCount?: number;
+  retryAfterSeconds?: number | null;
+  lastErrorType?: string | null;
   createdAt: string;
 };
 

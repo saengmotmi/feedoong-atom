@@ -8,6 +8,10 @@ export type SourceRecord = {
   lastCheckedAt?: string | null;
   lastHeadEtag?: string | null;
   lastHeadLastModified?: string | null;
+  nextCheckAt?: string | null;
+  errorCount?: number;
+  retryAfterSeconds?: number | null;
+  lastErrorType?: string | null;
   createdAt: string;
 };
 
@@ -45,6 +49,12 @@ export type SyncRepository = {
     checkedAt: string,
     headEtag: string | null,
     headLastModified: string | null
+  ) => MaybePromise<void>;
+  updateSourceFailureState: (
+    sourceId: number,
+    failedAt: string,
+    errorType: string,
+    retryAfterSeconds?: number | null
   ) => MaybePromise<void>;
 };
 

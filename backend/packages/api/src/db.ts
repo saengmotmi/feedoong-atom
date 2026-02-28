@@ -10,6 +10,10 @@ export type SourceRow = {
   lastCheckedAt?: string | null;
   lastHeadEtag?: string | null;
   lastHeadLastModified?: string | null;
+  nextCheckAt?: string | null;
+  errorCount?: number;
+  retryAfterSeconds?: number | null;
+  lastErrorType?: string | null;
   createdAt: string;
 };
 
@@ -40,6 +44,30 @@ type StorageShape = {
   items: ItemRow[];
 };
 
+const DEFAULT_RETRY_AFTER_SECONDS = 300;
+const MAX_RETRY_AFTER_SECONDS = 21600;
+
+const resolveRetryAfterSeconds = (errorCount: number, retryAfterSeconds?: number | null) => {
+  if (typeof retryAfterSeconds === "number" && retryAfterSeconds > 0) {
+    return Math.min(Math.floor(retryAfterSeconds), MAX_RETRY_AFTER_SECONDS);
+  }
+  return Math.min(DEFAULT_RETRY_AFTER_SECONDS * 2 ** Math.max(0, errorCount - 1), MAX_RETRY_AFTER_SECONDS);
+};
+
+const toNextCheckAt = (failedAt: string, retryAfterSeconds: number) =>
+  new Date(new Date(failedAt).getTime() + retryAfterSeconds * 1000).toISOString();
+
+const normalizeSourceRow = (source: SourceRow): SourceRow => ({
+  ...source,
+  lastCheckedAt: source.lastCheckedAt ?? null,
+  lastHeadEtag: source.lastHeadEtag ?? null,
+  lastHeadLastModified: source.lastHeadLastModified ?? null,
+  nextCheckAt: source.nextCheckAt ?? null,
+  errorCount: source.errorCount ?? 0,
+  retryAfterSeconds: source.retryAfterSeconds ?? null,
+  lastErrorType: source.lastErrorType ?? null
+});
+
 const createInitialStorage = (): StorageShape => ({
   nextSourceId: 1,
   nextItemId: 1,
@@ -60,7 +88,12 @@ export class FeedoongDb {
 
   private read(): StorageShape {
     const raw = fs.readFileSync(this.storagePath, "utf8");
-    return JSON.parse(raw) as StorageShape;
+    const parsed = JSON.parse(raw) as StorageShape;
+    return {
+      ...parsed,
+      sources: (parsed.sources ?? []).map(normalizeSourceRow),
+      items: parsed.items ?? []
+    };
   }
 
   private write(data: StorageShape) {
@@ -92,6 +125,10 @@ export class FeedoongDb {
       lastCheckedAt: null,
       lastHeadEtag: null,
       lastHeadLastModified: null,
+      nextCheckAt: null,
+      errorCount: 0,
+      retryAfterSeconds: null,
+      lastErrorType: null,
       createdAt: new Date().toISOString()
     };
 
@@ -119,7 +156,11 @@ export class FeedoongDb {
       const next: SourceRow = {
         ...source,
         title,
-        lastSyncedAt: syncedAt
+        lastSyncedAt: syncedAt,
+        nextCheckAt: null,
+        errorCount: 0,
+        retryAfterSeconds: null,
+        lastErrorType: null
       };
 
       if (checkMetadata) {
@@ -166,6 +207,37 @@ export class FeedoongDb {
         lastCheckedAt: checkedAt,
         lastHeadEtag: headEtag,
         lastHeadLastModified: headLastModified
+      };
+    });
+
+    this.write(data);
+  }
+
+  updateSourceFailureState(
+    sourceId: number,
+    failedAt: string,
+    errorType: string,
+    retryAfterSeconds?: number | null
+  ) {
+    const data = this.read();
+    data.sources = data.sources.map((source) => {
+      if (source.id !== sourceId) {
+        return source;
+      }
+
+      const nextErrorCount = (source.errorCount ?? 0) + 1;
+      const resolvedRetryAfterSeconds = resolveRetryAfterSeconds(
+        nextErrorCount,
+        retryAfterSeconds
+      );
+
+      return {
+        ...source,
+        lastCheckedAt: failedAt,
+        errorCount: nextErrorCount,
+        retryAfterSeconds: resolvedRetryAfterSeconds,
+        nextCheckAt: toNextCheckAt(failedAt, resolvedRetryAfterSeconds),
+        lastErrorType: errorType
       };
     });
 

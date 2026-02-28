@@ -6,6 +6,10 @@ type SourceRecord = {
   last_checked_at: string | null;
   last_head_etag: string | null;
   last_head_last_modified: string | null;
+  next_check_at: string | null;
+  error_count: number;
+  retry_after_seconds: number | null;
+  last_error_type: string | null;
   created_at: string;
 };
 
@@ -58,6 +62,10 @@ class FakeD1Statement {
             lastCheckedAt: source.last_checked_at,
             lastHeadEtag: source.last_head_etag,
             lastHeadLastModified: source.last_head_last_modified,
+            nextCheckAt: source.next_check_at,
+            errorCount: source.error_count,
+            retryAfterSeconds: source.retry_after_seconds,
+            lastErrorType: source.last_error_type,
             createdAt: source.created_at
           })) as T[]
       };
@@ -96,6 +104,10 @@ class FakeD1Statement {
   async first<T = unknown>(): Promise<T | null> {
     const normalized = normalizeQuery(this.query);
 
+    if (normalized.startsWith("select 1 from sources limit 1")) {
+      return null;
+    }
+
     if (
       normalized.startsWith("select id, url, title,") &&
       normalized.includes("from sources") &&
@@ -114,6 +126,10 @@ class FakeD1Statement {
         lastCheckedAt: source.last_checked_at,
         lastHeadEtag: source.last_head_etag,
         lastHeadLastModified: source.last_head_last_modified,
+        nextCheckAt: source.next_check_at,
+        errorCount: source.error_count,
+        retryAfterSeconds: source.retry_after_seconds,
+        lastErrorType: source.last_error_type,
         createdAt: source.created_at
       } as T;
     }
@@ -150,6 +166,10 @@ class FakeD1Statement {
         last_checked_at: null,
         last_head_etag: null,
         last_head_last_modified: null,
+        next_check_at: null,
+        error_count: 0,
+        retry_after_seconds: null,
+        last_error_type: null,
         created_at: createdAt
       });
       return { meta: { changes: 1, last_row_id: newId } };
@@ -227,6 +247,22 @@ class FakeD1Statement {
         }
         if (column === "last_head_last_modified") {
           source.last_head_last_modified = value;
+          return;
+        }
+        if (column === "next_check_at") {
+          source.next_check_at = value;
+          return;
+        }
+        if (column === "error_count") {
+          source.error_count = Number(value ?? 0);
+          return;
+        }
+        if (column === "retry_after_seconds") {
+          source.retry_after_seconds = value === null ? null : Number(value);
+          return;
+        }
+        if (column === "last_error_type") {
+          source.last_error_type = value;
         }
       });
       return { meta: { changes: 1 } };

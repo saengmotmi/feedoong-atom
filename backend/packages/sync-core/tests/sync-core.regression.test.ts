@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { describe, it } from "node:test";
 
-import { SourceNotFoundError, syncOneSource } from "../src/index.js";
+import { SourceNotFoundError, syncAllSources, syncOneSource } from "../src/index.js";
 
 import type { ParseFeedResult, SourceRecord, SyncRepository } from "../src/types.js";
 
@@ -27,7 +27,8 @@ describe("sync-core regression fixtures", () => {
       listSources: async () => [],
       insertItems: async () => 0,
       updateSourceMetadata: async () => undefined,
-      updateSourceCheckMetadata: async () => undefined
+      updateSourceCheckMetadata: async () => undefined,
+      updateSourceFailureState: async () => undefined
     };
 
     await assert.rejects(
@@ -64,7 +65,8 @@ describe("sync-core regression fixtures", () => {
       },
       updateSourceCheckMetadata: async () => {
         checkMetadataCallCount += 1;
-      }
+      },
+      updateSourceFailureState: async () => undefined
     };
 
     const result = await syncOneSource({
@@ -126,7 +128,8 @@ describe("sync-core regression fixtures", () => {
       },
       updateSourceCheckMetadata: async () => {
         checkMetadataCallCount += 1;
-      }
+      },
+      updateSourceFailureState: async () => undefined
     };
 
     const result = await syncOneSource({
@@ -160,5 +163,102 @@ describe("sync-core regression fixtures", () => {
       "Sat, 28 Feb 2026 01:00:00 GMT"
     );
     assert.equal(sourceMetadataArgs.checkMetadata?.checkedAt, FIXED_NOW);
+  });
+
+  it("nextCheckAt이 미래인 source는 syncAll에서 건너뛴다", async () => {
+    const dueSource = cloneSource();
+    const futureSource = {
+      ...cloneSource(),
+      id: 99,
+      url: "https://example.com/future.xml",
+      nextCheckAt: "2026-03-02T00:00:00.000Z"
+    };
+    let parseFeedCallCount = 0;
+
+    const repository: SyncRepository = {
+      getSourceById: async (sourceId) =>
+        sourceId === dueSource.id ? dueSource : futureSource,
+      listSources: async () => [dueSource, futureSource],
+      insertItems: async (_sourceId, items) => items.length,
+      updateSourceMetadata: async () => undefined,
+      updateSourceCheckMetadata: async () => undefined,
+      updateSourceFailureState: async () => undefined
+    };
+
+    const result = await syncAllSources({
+      repository,
+      now: () => FIXED_NOW,
+      parseFeed: async () => {
+        parseFeedCallCount += 1;
+        return FIXTURE.parsed;
+      },
+      fetchImpl: async () =>
+        new Response(null, {
+          status: 200,
+          headers: {
+            etag: "etag-v3",
+            "last-modified": "Sat, 28 Feb 2026 02:00:00 GMT"
+          }
+        })
+    });
+
+    assert.equal(result.syncedSources, 1);
+    assert.equal(result.failedSources, 0);
+    assert.equal(result.details.length, 1);
+    assert.equal(parseFeedCallCount, 1);
+    assert.equal(result.details[0]?.sourceId, dueSource.id);
+  });
+
+  it("실패한 source는 updateSourceFailureState로 backoff 상태를 기록한다", async () => {
+    const source = cloneSource();
+    let failureUpdateArgs:
+      | {
+          sourceId: number;
+          failedAt: string;
+          errorType: string;
+          retryAfterSeconds?: number | null;
+        }
+      | undefined;
+
+    const repository: SyncRepository = {
+      getSourceById: async () => source,
+      listSources: async () => [source],
+      insertItems: async () => 0,
+      updateSourceMetadata: async () => undefined,
+      updateSourceCheckMetadata: async () => undefined,
+      updateSourceFailureState: async (sourceId, failedAt, errorType, retryAfterSeconds) => {
+        failureUpdateArgs = {
+          sourceId,
+          failedAt,
+          errorType,
+          retryAfterSeconds
+        };
+      }
+    };
+
+    const result = await syncAllSources({
+      repository,
+      now: () => FIXED_NOW,
+      parseFeed: async () => {
+        throw new Error("sync failed (429): rate limited");
+      },
+      fetchImpl: async () =>
+        new Response(null, {
+          status: 200,
+          headers: {
+            etag: "etag-v9",
+            "last-modified": "Sat, 28 Feb 2026 03:00:00 GMT"
+          }
+        })
+    });
+
+    assert.equal(result.syncedSources, 1);
+    assert.equal(result.failedSources, 1);
+    assert.equal(result.details[0]?.status, "failed");
+    assert.ok(failureUpdateArgs);
+    assert.equal(failureUpdateArgs.sourceId, source.id);
+    assert.equal(failureUpdateArgs.failedAt, FIXED_NOW);
+    assert.equal(failureUpdateArgs.errorType, "HTTP_429");
+    assert.equal(failureUpdateArgs.retryAfterSeconds, 3600);
   });
 });
